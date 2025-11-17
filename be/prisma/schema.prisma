@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Assignment_Submission {
+  id_submission     Int               @id @default(autoincrement())
+  assignment_id     Int
+  user_id           Int
+  submitted_at      DateTime?         @default(now()) @db.Timestamptz(6)
+  file_path         String?
+  is_late           Boolean?          @default(false)
+  Module_Assignment Module_Assignment @relation(fields: [assignment_id], references: [id_assignment], onDelete: Cascade, onUpdate: NoAction)
+  User              User              @relation(fields: [user_id], references: [id_user], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Attempt_Answer {
+  id_answer          Int              @id @default(autoincrement())
+  attempt_id         Int
+  question_id        Int
+  selected_option_id Int?
+  Quiz_Attempt       Quiz_Attempt     @relation(fields: [attempt_id], references: [id_attempt], onDelete: Cascade, onUpdate: NoAction)
+  Quiz_Question      Quiz_Question    @relation(fields: [question_id], references: [id_question], onDelete: Cascade, onUpdate: NoAction)
+  Question_Option    Question_Option? @relation(fields: [selected_option_id], references: [id_option], onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Course {
+  id_course      Int             @id @default(autoincrement())
+  category_id    Int
+  title          String          @db.VarChar(255)
+  description    String?
+  start_date     DateTime?       @db.Date
+  end_date       DateTime?       @db.Date
+  enrollment_key String?         @db.VarChar(50)
+  CourseCategory CourseCategory  @relation(fields: [category_id], references: [id_category], onDelete: Cascade, onUpdate: NoAction)
+  CourseSection  CourseSection[]
+  Enrollment     Enrollment[]
+  Grade          Grade[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model CourseCategory {
+  id_category          Int              @id @default(autoincrement())
+  name                 String           @db.VarChar(255)
+  parent_id            Int?
+  Course               Course[]
+  CourseCategory       CourseCategory?  @relation("CourseCategoryToCourseCategory", fields: [parent_id], references: [id_category], onUpdate: NoAction)
+  other_CourseCategory CourseCategory[] @relation("CourseCategoryToCourseCategory")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model CourseModule {
+  id_module         Int                 @id @default(autoincrement())
+  section_id        Int
+  module_type       module_type
+  content_id        Int
+  title             String              @db.VarChar(255)
+  order_index       Int?                @default(0)
+  CourseSection     CourseSection       @relation(fields: [section_id], references: [id_section], onDelete: Cascade, onUpdate: NoAction)
+  Grade             Grade[]
+  Module_Completion Module_Completion[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model CourseSection {
+  id_section   Int            @id @default(autoincrement())
+  course_id    Int
+  title        String         @db.VarChar(255)
+  order_index  Int?           @default(0)
+  CourseModule CourseModule[]
+  Course       Course         @relation(fields: [course_id], references: [id_course], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Enrollment {
+  id_enrollment Int       @id @default(autoincrement())
+  user_id       Int
+  course_id     Int
+  role          role_type
+  Course        Course    @relation(fields: [course_id], references: [id_course], onDelete: Cascade, onUpdate: NoAction)
+  User          User      @relation(fields: [user_id], references: [id_user], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, course_id])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Grade {
+  id_grade                   Int          @id @default(autoincrement())
+  course_id                  Int
+  user_id                    Int
+  module_id                  Int
+  score                      Decimal?     @db.Decimal(5, 2)
+  feedback                   String?
+  grader_id                  Int?
+  graded_at                  DateTime?    @db.Timestamptz(6)
+  Course                     Course       @relation(fields: [course_id], references: [id_course], onDelete: Cascade, onUpdate: NoAction)
+  User_Grade_grader_idToUser User?        @relation("Grade_grader_idToUser", fields: [grader_id], references: [id_user], onUpdate: NoAction)
+  CourseModule               CourseModule @relation(fields: [module_id], references: [id_module], onDelete: Cascade, onUpdate: NoAction)
+  User_Grade_user_idToUser   User         @relation("Grade_user_idToUser", fields: [user_id], references: [id_user], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, module_id])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Module_Assignment {
+  id_assignment         Int                     @id @default(autoincrement())
+  description           String?
+  due_date              DateTime?               @db.Timestamptz(6)
+  Assignment_Submission Assignment_Submission[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Module_Completion {
+  id_completion Int          @id @default(autoincrement())
+  user_id       Int
+  module_id     Int
+  completed_at  DateTime?    @default(now()) @db.Timestamptz(6)
+  CourseModule  CourseModule @relation(fields: [module_id], references: [id_module], onDelete: Cascade, onUpdate: NoAction)
+  User          User         @relation(fields: [user_id], references: [id_user], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, module_id])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Module_Quiz {
+  id_quiz            Int             @id @default(autoincrement())
+  time_limit_minutes Int?
+  grade_passing      Decimal?        @db.Decimal(5, 2)
+  Quiz_Attempt       Quiz_Attempt[]
+  Quiz_Question      Quiz_Question[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Module_Resource {
+  id_resource      Int    @id @default(autoincrement())
+  file_path_or_url String
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Notification {
+  id_notification Int       @id @default(autoincrement())
+  user_id         Int
+  message         String
+  url_target      String?   @db.VarChar(255)
+  is_read         Boolean?  @default(false)
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  User            User      @relation(fields: [user_id], references: [id_user], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Question_Option {
+  id_option      Int              @id @default(autoincrement())
+  question_id    Int
+  option_text    String
+  is_correct     Boolean?         @default(false)
+  Attempt_Answer Attempt_Answer[]
+  Quiz_Question  Quiz_Question    @relation(fields: [question_id], references: [id_question], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Quiz_Attempt {
+  id_attempt     Int              @id @default(autoincrement())
+  quiz_id        Int
+  user_id        Int
+  started_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  completed_at   DateTime?        @db.Timestamptz(6)
+  score          Decimal?         @db.Decimal(5, 2)
+  Attempt_Answer Attempt_Answer[]
+  Module_Quiz    Module_Quiz      @relation(fields: [quiz_id], references: [id_quiz], onDelete: Cascade, onUpdate: NoAction)
+  User           User             @relation(fields: [user_id], references: [id_user], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Quiz_Question {
+  id_question     Int               @id @default(autoincrement())
+  quiz_id         Int
+  question_text   String
+  type            question_type
+  Attempt_Answer  Attempt_Answer[]
+  Question_Option Question_Option[]
+  Module_Quiz     Module_Quiz       @relation(fields: [quiz_id], references: [id_quiz], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model User {
+  id_user                     Int                     @id @default(autoincrement())
+  username                    String                  @unique @db.VarChar(255)
+  email                       String                  @unique @db.VarChar(255)
+  password_hash               String
+  role                        String?                 @db.VarChar(50)
+  is_locked                   Boolean?                @default(false)
+  Assignment_Submission       Assignment_Submission[]
+  Enrollment                  Enrollment[]
+  Grade_Grade_grader_idToUser Grade[]                 @relation("Grade_grader_idToUser")
+  Grade_Grade_user_idToUser   Grade[]                 @relation("Grade_user_idToUser")
+  Module_Completion           Module_Completion[]
+  Notification                Notification[]
+  Quiz_Attempt                Quiz_Attempt[]
+}
+
+enum module_type {
+  assignment
+  quiz
+  resource_file
+  resource_url
+  page
+}
+
+enum question_type {
+  multiple_choice
+  true_false
+}
+
+enum role_type {
+  teacher
+  student
+}
