@@ -1,0 +1,243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            Int                    @id @default(autoincrement()) @map("id_user")
+  username      String                 @unique @db.VarChar(255)
+  email         String                 @unique @db.VarChar(255)
+  passwordHash  String                 @map("password_hash")
+  role          String?                @db.VarChar(50)
+  isLocked      Boolean?               @default(false) @map("is_locked")
+  submissions   AssignmentSubmission[]
+  enrollments   Enrollment[]
+  gradedGrades  Grade[]                @relation("GradedBy")
+  grades        Grade[]                @relation("UserGrades")
+  completions   ModuleCompletion[]
+  notifications Notification[]
+  attempts      QuizAttempt[]
+
+  @@map("User")
+}
+
+model CourseCategory {
+  id       Int              @id @default(autoincrement()) @map("id_category")
+  name     String           @db.VarChar(255)
+  parentId Int?             @map("parent_id")
+  courses  Course[]
+  parent   CourseCategory?  @relation("CategoryParentChild", fields: [parentId], references: [id])
+  children CourseCategory[] @relation("CategoryParentChild")
+
+  @@map("CourseCategory")
+}
+
+model Course {
+  id            Int             @id @default(autoincrement()) @map("id_course")
+  categoryId    Int             @map("category_id")
+  title         String          @db.VarChar(255)
+  description   String?
+  startDate     DateTime?       @map("start_date") @db.Date
+  endDate       DateTime?       @map("end_date") @db.Date
+  enrollmentKey String?         @map("enrollment_key") @db.VarChar(50)
+  category      CourseCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sections      CourseSection[]
+  enrollments   Enrollment[]
+  grades        Grade[]
+
+  @@map("Course")
+}
+
+model Enrollment {
+  id       Int      @id @default(autoincrement()) @map("id_enrollment")
+  userId   Int      @map("user_id")
+  courseId Int      @map("course_id")
+  role     RoleType
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("Enrollment")
+}
+
+model CourseSection {
+  id         Int            @id @default(autoincrement()) @map("id_section")
+  courseId   Int            @map("course_id")
+  title      String         @db.VarChar(255)
+  orderIndex Int?           @default(0) @map("order_index")
+  modules    CourseModule[]
+  course     Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("CourseSection")
+}
+
+model CourseModule {
+  id          Int                @id @default(autoincrement()) @map("id_module")
+  sectionId   Int                @map("section_id")
+  moduleType  ModuleType         @map("module_type")
+  contentId   Int                @map("content_id")
+  title       String             @db.VarChar(255)
+  orderIndex  Int?               @default(0) @map("order_index")
+  section     CourseSection      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  grades      Grade[]
+  completions ModuleCompletion[]
+
+  @@map("CourseModule")
+}
+
+model ModuleAssignment {
+  id          Int                    @id @default(autoincrement()) @map("id_assignment")
+  description String?
+  dueDate     DateTime?              @map("due_date") @db.Timestamptz(6)
+  submissions AssignmentSubmission[]
+
+  @@map("Module_Assignment")
+}
+
+model ModuleQuiz {
+  id               Int            @id @default(autoincrement()) @map("id_quiz")
+  timeLimitMinutes Int?           @map("time_limit_minutes")
+  gradePassing     Decimal?       @map("grade_passing") @db.Decimal(5, 2)
+  attempts         QuizAttempt[]
+  questions        QuizQuestion[]
+
+  @@map("Module_Quiz")
+}
+
+model ModuleResource {
+  id            Int    @id @default(autoincrement()) @map("id_resource")
+  filePathOrUrl String @map("file_path_or_url")
+
+  @@map("Module_Resource")
+}
+
+model AssignmentSubmission {
+  id           Int              @id @default(autoincrement()) @map("id_submission")
+  assignmentId Int              @map("assignment_id")
+  userId       Int              @map("user_id")
+  submittedAt  DateTime?        @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  filePath     String?          @map("file_path")
+  isLate       Boolean?         @default(false) @map("is_late")
+  assignment   ModuleAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("Assignment_Submission")
+}
+
+model QuizQuestion {
+  id             Int              @id @default(autoincrement()) @map("id_question")
+  quizId         Int              @map("quiz_id")
+  questionText   String           @map("question_text")
+  type           QuestionType
+  attemptAnswers AttemptAnswer[]
+  options        QuestionOption[]
+  quiz           ModuleQuiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("Quiz_Question")
+}
+
+model QuestionOption {
+  id             Int             @id @default(autoincrement()) @map("id_option")
+  questionId     Int             @map("question_id")
+  optionText     String          @map("option_text")
+  isCorrect      Boolean?        @default(false) @map("is_correct")
+  attemptAnswers AttemptAnswer[]
+  question       QuizQuestion    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("Question_Option")
+}
+
+model QuizAttempt {
+  id          Int             @id @default(autoincrement()) @map("id_attempt")
+  quizId      Int             @map("quiz_id")
+  userId      Int             @map("user_id")
+  startedAt   DateTime?       @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime?       @map("completed_at") @db.Timestamptz(6)
+  score       Decimal?        @db.Decimal(5, 2)
+  answers     AttemptAnswer[]
+  quiz        ModuleQuiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("Quiz_Attempt")
+}
+
+model AttemptAnswer {
+  id               Int             @id @default(autoincrement()) @map("id_answer")
+  attemptId        Int             @map("attempt_id")
+  questionId       Int             @map("question_id")
+  selectedOptionId Int?            @map("selected_option_id")
+  attempt          QuizAttempt     @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question         QuizQuestion    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption   QuestionOption? @relation(fields: [selectedOptionId], references: [id])
+
+  @@map("Attempt_Answer")
+}
+
+model Grade {
+  id       Int          @id @default(autoincrement()) @map("id_grade")
+  courseId Int          @map("course_id")
+  userId   Int          @map("user_id")
+  moduleId Int          @map("module_id")
+  score    Decimal?     @db.Decimal(5, 2)
+  feedback String?
+  graderId Int?         @map("grader_id")
+  gradedAt DateTime?    @map("graded_at") @db.Timestamptz(6)
+  course   Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  grader   User?        @relation("GradedBy", fields: [graderId], references: [id])
+  module   CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  user     User         @relation("UserGrades", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+  @@map("Grade")
+}
+
+model ModuleCompletion {
+  id          Int          @id @default(autoincrement()) @map("id_completion")
+  userId      Int          @map("user_id")
+  moduleId    Int          @map("module_id")
+  completedAt DateTime?    @default(now()) @map("completed_at") @db.Timestamptz(6)
+  module      CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+  @@map("Module_Completion")
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement()) @map("id_notification")
+  userId    Int       @map("user_id")
+  message   String
+  urlTarget String?   @map("url_target") @db.VarChar(255)
+  isRead    Boolean?  @default(false) @map("is_read")
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("Notification")
+}
+
+enum RoleType {
+  teacher
+  student
+
+  @@map("role_type")
+}
+
+enum ModuleType {
+  assignment
+  quiz
+  resource_file
+  resource_url
+  page
+
+  @@map("module_type")
+}
+
+enum QuestionType {
+  multiple_choice
+  true_false
+
+  @@map("question_type")
+}
