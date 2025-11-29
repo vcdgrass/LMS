@@ -7,6 +7,10 @@ import AdminLayout from './layouts/AdminLayout';
 import AdminDashboard from './pages/admin/Dashboard';
 import UserManagement from './pages/admin/UserManagement';
 import CategoryManagement from './pages/admin/CategoryManagement';
+import TeacherLayout from './layouts/TeacherLayout';
+import TeacherDashboard from './pages/teacher/Dashboard';
+import CreateCourse from './pages/teacher/CreateCourse';
+
 
 // Ví dụ về component bảo vệ Route (chỉ cho phép user đã login)
 import PrivateRoute from './components/PrivateRoute'; 
@@ -33,6 +37,18 @@ const App = () => {
                             <Route path="categories" element={<CategoryManagement />} />
                         </Route>
                         
+                    </Route>
+
+                    <Route element={<PrivateRoute allowedRoles={['teacher']} />}>
+                        <Route path="/teacher" element={<TeacherLayout />}>
+                            
+                            {/* Mặc định vào /teacher/dashboard */}
+                            <Route path="dashboard" element={<TeacherDashboard />} />
+                            
+                            {/* Route tạo khóa học */}
+                            <Route path="create-course" element={<CreateCourse />} />
+
+                        </Route>
                     </Route>
                 </Routes>
             </Router>
