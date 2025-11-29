@@ -3,7 +3,6 @@ const { getAllUsers, createUser, importUsers } = require('../controllers/userCon
 const { uploadCsv } = require('../middlewares/uploadMiddleware');
 const { verifyToken , isAdmin } = require('../middlewares/authMiddleware');
 
-// GET /admin/users - Lấy danh sách tất cả người dùng
 router.get('/users', async (req, res) => {
     try {
         const users = await getAllUsers();

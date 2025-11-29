@@ -20,6 +20,7 @@ model User {
   completions   ModuleCompletion[]
   notifications Notification[]
   attempts      QuizAttempt[]
+  teacherCourses TeacherCourse[]
 
   @@map("User")
 }
@@ -44,11 +45,23 @@ model Course {
   endDate       DateTime?       @map("end_date") @db.Date
   enrollmentKey String?         @map("enrollment_key") @db.VarChar(50)
   category      CourseCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  teacherCourses TeacherCourse[] 
   sections      CourseSection[]
   enrollments   Enrollment[]
   grades        Grade[]
 
   @@map("Course")
+}
+
+model TeacherCourse {
+  id       Int    @id @default(autoincrement()) @map("id_teacher_course")
+  userId   Int    @map("user_id")
+  courseId Int    @map("course_id")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("Teacher_Course")
 }
 
 model Enrollment {
