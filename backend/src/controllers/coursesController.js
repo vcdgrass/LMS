@@ -1,8 +1,11 @@
+const { get } = require('../routes/coursesRoute');
 const coursesService = require('../services/coursesServices');
 
 const getCoursesByTeacher = async (req, res) => {
     try {
-        const teacherId = req.user.id; // Giả sử ID giảng viên được lưu trong req.user sau khi xác thực
+        // SỬA DÒNG NÀY: req.user.id -> req.user.userId
+        const teacherId = req.user.userId; 
+        
         const courses = await coursesService.getTeachingCourses(teacherId);
         res.status(200).json(courses);
     } catch (error) {
@@ -13,8 +16,11 @@ const getCoursesByTeacher = async (req, res) => {
 
 const createCourse = async (req, res) => {
     try {
-        const teacherId = req.user.id; // Giả sử ID giảng viên được lưu trong req.user sau khi xác thực
-        console.log("Creating course for teacherId:", teacherId);
+        // SỬA DÒNG NÀY: req.user.id -> req.user.userId
+        const teacherId = req.user.userId; 
+        
+        console.log("Creating course for teacherId:", teacherId); // Log kiểm tra
+        
         const courseData = {
             ...req.body,
             teacherId 
@@ -27,7 +33,28 @@ const createCourse = async (req, res) => {
     }
 };
 
+const getCourseDetail = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const course = await coursesService.getCourseById(id);
+
+        if (!course) {
+            return res.status(404).json({ message: "Không tìm thấy khóa học." });
+        }
+
+        // (Tùy chọn) Kiểm tra quyền truy cập: 
+        // Chỉ cho phép nếu user là Giáo viên của lớp HOẶC Sinh viên đã ghi danh
+        // Logic này có thể mở rộng sau.
+
+        res.status(200).json(course);
+    } catch (error) {
+        console.error("Lỗi lấy chi tiết khóa học:", error);
+        res.status(500).json({ message: "Lỗi máy chủ." });
+    }
+};
+
 module.exports = {
     getCoursesByTeacher,
-    createCourse
+    createCourse,
+    getCourseDetail,
 };

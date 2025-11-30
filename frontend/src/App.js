@@ -10,6 +10,7 @@ import CategoryManagement from './pages/admin/CategoryManagement';
 import TeacherLayout from './layouts/TeacherLayout';
 import TeacherDashboard from './pages/teacher/Dashboard';
 import CreateCourse from './pages/teacher/CreateCourse';
+import CourseDetail from './pages/course/CourseDetail';
 
 
 // Ví dụ về component bảo vệ Route (chỉ cho phép user đã login)
@@ -49,6 +50,7 @@ const App = () => {
                             <Route path="create-course" element={<CreateCourse />} />
 
                         </Route>
+                        <Route path="/course/:id" element={<CourseDetail />} />
                     </Route>
                 </Routes>
             </Router>

@@ -14,7 +14,7 @@ const LandingPage = () => {
         if (!loading && user) {
             if (user.role === 'admin') navigate('/admin/dashboard');
             else if (user.role === 'teacher') navigate('/teacher/dashboard');
-            else navigate('/student/dashboard');
+            if(user.role === 'student') navigate('/student/dashboard');
         }
     }, [user, loading, navigate]);
 

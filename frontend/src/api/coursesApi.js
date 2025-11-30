@@ -6,7 +6,10 @@ const coursesApi = {
     },
     createCourses: (data) => {
         return axiosClient.post('/courses', data);
-    }
+    },
+    getById: (id) => {
+        return axiosClient.get(`/courses/${id}`);
+    },
 };
 
 export default coursesApi;

@@ -99,7 +99,40 @@ const login = async (req, res) => {
   }
 };
 
+const getMe = async (req, res) => {
+  try {
+    // req.user được tạo ra từ middleware verifyToken
+    const userId = req.user.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        isLocked: true
+        // KHÔNG select passwordHash
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng.' });
+    }
+
+    if (user.isLocked) {
+      return res.status(403).json({ error: 'Tài khoản đã bị khóa.' });
+    }
+
+    res.status(200).json({ user });
+  } catch (error) {
+    console.error('Lỗi getMe:', error);
+    res.status(500).json({ error: 'Lỗi máy chủ.' });
+  }
+};
+
 module.exports = {
   registerAdmin,
   login,
+  getMe,
 };
