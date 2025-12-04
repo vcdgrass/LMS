@@ -50,25 +50,25 @@ const LandingPage = () => {
             </section>
 
             {/* --- COURSE CATEGORIES (Duyệt danh mục) ---  */}
-            <section className="categories py-10 px-4 max-w-6xl mx-auto">
+            {/* <section className="categories py-10 px-4 max-w-6xl mx-auto">
                 <h2 className="text-2xl font-bold mb-6 border-b pb-2">Danh mục Đào tạo</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {categories.map(cat => (
                         <div key={cat.id_category} className="p-4 border rounded hover:shadow-lg transition">
                             <h3 className="font-bold text-lg">{cat.name}</h3>
                             {/* Nếu là danh mục cha, có thể hiển thị thêm info */}
-                            <Link to={`/category/${cat.id_category}`} className="text-blue-500 text-sm mt-2 block">
+                            {/* <Link to={`/category/${cat.id_category}`} className="text-blue-500 text-sm mt-2 block">
                                 Xem các khóa học &rarr;
                             </Link>
                         </div>
                     ))}
-                </div>
-            </section>
+                </div> */}
+            {/* </section> */}
 
-            {/* --- FOOTER --- */}
+            {/* --- FOOTER ---
             <footer className="bg-gray-800 text-white p-6 text-center mt-10">
                 <p>&copy; 2025 LMS Project. All rights reserved.</p>
-            </footer>
+            </footer> */}
         </div>
     );
 };

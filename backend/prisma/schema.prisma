@@ -122,6 +122,7 @@ model ModuleQuiz {
 
 model ModuleResource {
   id            Int    @id @default(autoincrement()) @map("id_resource")
+  description   String?
   filePathOrUrl String @map("file_path_or_url")
 
   @@map("Module_Resource")

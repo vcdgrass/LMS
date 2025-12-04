@@ -82,7 +82,7 @@ const TeacherLayout = () => {
                             <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 transform translate-x-1/4 -translate-y-1/4 bg-red-600 rounded-full">2</span>
                         </button>
 
-                        <div className="flex items-center space-x-2 border-l pl-4">
+                        {/* <div className="flex items-center space-x-2 border-l pl-4">
                             <div className="text-right hidden md:block">
                                 <div className="text-sm font-bold text-gray-700">{user.username}</div>
                                 <div className="text-xs text-indigo-600">Giảng viên</div>
@@ -90,7 +90,7 @@ const TeacherLayout = () => {
                             <div className="w-10 h-10 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-lg">
                                 {user.username.charAt(0).toUpperCase()}
                             </div>
-                        </div>
+                        </div> */}
                     </div>
                 </header>
 

@@ -53,8 +53,77 @@ const getCourseDetail = async (req, res) => {
     }
 };
 
+const addSection = async (req, res) => {
+    try {
+        const { id } = req.params; // courseId
+        const { title } = req.body;
+        const section = await coursesService.createSection(id, title);
+        res.status(201).json(section);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Lỗi tạo chương." });
+    }
+};
+
+const addModule = async (req, res) => {
+    try {
+        const { sectionId } = req.params;
+        // body: { title, type, ... }
+        const module = await coursesService.createModule(sectionId, req.body);
+        res.status(201).json(module);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Lỗi tạo bài học." });
+    }
+};
+
+const getModuleById = async (req, res) => {
+    try {
+        const { moduleId } = req.params;
+        const type = req.query.type;
+        const module = await coursesService.getModuleById(moduleId, type);
+        if (!module) {
+            console.error("Module not found for ID:", moduleId, "and type:", type);
+            return res.status(404).json({ message: "Không tìm thấy bài học." });
+        }
+        res.status(200).json(module);
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Lỗi máy chủ." });
+    }
+};
+
+const deleteSection = async (req, res) => {
+    try {
+        const { sectionId } = req.params;
+        await coursesService.deleteSection(sectionId);
+        res.status(200).json({ message: "Xoá chương thành công." });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Lỗi xoá chương." });
+    }
+};
+
+const deleteModule = async (req, res) => {
+    try { 
+        const { moduleId } = req.params;
+        const { type } = req.query;
+        await coursesService.deleteModule(moduleId, type);
+        res.status(200).json({ message: "Xoá bài học thành công."});
+    } catch (error) {
+        console.error(error);
+        resizeBy.status(500).json ({ message: "Lỗi xoá bài học."});
+    }
+}
+
 module.exports = {
     getCoursesByTeacher,
     createCourse,
     getCourseDetail,
+    addSection,
+    addModule,
+    getModuleById,
+    deleteSection,
+    deleteModule,
 };

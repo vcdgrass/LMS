@@ -1,3 +1,4 @@
+const e = require('express');
 const { prisma } = require('../utils/db');
 
 const createCourse = async (courseData) => {
@@ -74,8 +75,142 @@ const getCourseById = async (courseId) => {
     return course;
 };
 
+const createSection = async (courseId, title) => {
+    // Tìm section cuối cùng để tính orderIndex
+    const lastSection = await prisma.courseSection.findFirst({
+        where: { courseId: parseInt(courseId) },
+        orderBy: { orderIndex: 'desc' }
+    });
+    const newOrder = lastSection ? (lastSection.orderIndex || 0) + 1 : 0;
+
+    return await prisma.courseSection.create({
+        data: {
+            courseId: parseInt(courseId),
+            title: title.title,
+            orderIndex: newOrder
+        }
+    });
+};
+
+const createModule = async (sectionId, moduleData) => {
+  const lastModule = await prisma.courseModule.findFirst({
+    where: { sectionId: parseInt(sectionId) },
+    orderBy: { orderIndex: 'desc' }
+  });
+
+  const newOrder = lastModule ? (lastModule.orderIndex || 0) + 1 : 0;
+
+  let content;
+
+  if (moduleData.type === 'resource_url') {
+    content = await prisma.moduleResource.create({
+      data: {
+        description: moduleData.description,
+        filePathOrUrl: moduleData.filePathOrUrl || ''
+      }
+    });
+  } else if (moduleData.type === 'resource_file') {
+    content = await prisma.moduleResource.create({
+      data: {
+        description: moduleData.description, 
+        filePathOrUrl: moduleData.filePathOrUrl || ''
+      }
+    });
+  } else if (moduleData.type === 'assignment') {
+    content = await prisma.moduleAssignment.create({
+      data: {
+        description: moduleData.description || '',
+        dueDate: moduleData.dueDate ? new Date(moduleData.dueDate) : null
+      }
+    });
+  } else if (moduleData.type === 'quiz') {
+    content = await prisma.moduleQuiz.create({
+      data: {
+        timeLimitMinutes: moduleData.timeLimitMinutes || null,
+        description: moduleData.description || '',
+        gradePassing: moduleData.gradePassing || null,
+      }
+    });
+  }
+
+  const courseModule = await prisma.courseModule.create({
+    data: {
+      sectionId: parseInt(sectionId),
+      title: moduleData.title,
+      moduleType: moduleData.type,
+      contentId: content.id,
+      orderIndex: newOrder
+    }
+  });
+
+  return courseModule;
+};
+
+
+const getModuleById = async (id, type) => {
+    let moduleContent = null;
+    if (type === 'resource_url') {
+        moduleContent = await prisma.moduleResource.findUnique({
+            where: { id: parseInt(id) } 
+        });
+    } else if (type === 'resource_file') {
+        moduleContent = await prisma.moduleResource.findUnique({
+            where: { id: parseInt(id) } 
+        });
+    } else if (type === 'assignment') {
+        moduleContent = await prisma.moduleAssignment.findUnique({
+            where: { id: parseInt(id) } 
+        });
+    } else if (type === 'quiz') {
+        moduleContent = await prisma.moduleQuiz.findUnique({
+            where: { id: parseInt(id) } 
+        });
+    }
+    return moduleContent;
+}
+
+const deleteSection = async (sectionId) => {
+    // Xoá section cùng với các module bên trong (theo cascade)
+    await prisma.courseSection.delete({
+        where: { id: parseInt(sectionId) }
+    });
+};
+
+const deleteModule = async (moduleId, type) => {
+    try {
+        const contentId = await prisma.courseModule.findUnique({
+            where: { id: parseInt(moduleId)},
+            select: { contentId: true, },
+        });
+        await prisma.courseModule.delete({
+            where: { id: parseInt(moduleId) }
+        });
+        console.log("contentId: ", contentId);
+        if (type === 'resource_url' || type === 'resource_file') {
+            await prisma.moduleResource.delete({
+                where: { id: parseInt(contentId) }
+            });
+        } else if (type === 'assignment') {
+            await prisma.moduleAssignment.delete({
+                where: { id: parseInt(contentId) }
+            });
+        } else if (type === 'quiz') {
+            await prisma.moduleQuiz.delete({
+                where: { id: parseInt(contentId) }
+            });
+        }
+    } catch (error) {
+        throw new Error('Lỗi khi xoá bài học: ' + error.message);
+    }
+};
+
 module.exports = {
     createCourse,
     getTeachingCourses,
     getCourseById,
+    createSection, 
+    createModule, 
+    getModuleById,
+    deleteSection, 
+    deleteModule,
 };
