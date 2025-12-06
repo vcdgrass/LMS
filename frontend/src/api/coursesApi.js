@@ -32,6 +32,28 @@ const coursesApi = {
             params: { type }
         });
     },
+    submitAssignment: (assignmentId, file) => {
+        const formData = new FormData();
+        formData.append('file', file); // Key 'file' phải khớp với backend upload.single('file')
+
+        return axiosClient.post(`/courses/assignments/${assignmentId}/submit`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    },
+    getEnrolledCourses: (studentId) => {
+        return axiosClient.get(`/courses/student/${studentId}`);
+    },
+    getStudents: (courseId) => {
+        return axiosClient.get(`/courses/${courseId}/students`);
+    },
+    addStudent: (courseId, email) => {
+        return axiosClient.post(`/courses/${courseId}/students`, { email });
+    },
+    removeStudent: (courseId, studentId) => {
+        return axiosClient.delete(`/courses/${courseId}/students/${studentId}`);
+    }
 };
 
 export default coursesApi;

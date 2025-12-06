@@ -4,6 +4,7 @@ import coursesApi from '../../api/coursesApi';
 import { useAuth } from '../../contexts/AuthContext';
 import AssignmentModule from '../../components/AssignmentModule';
 import ResourseModule from '../../components/ResourseModule';
+import StudentManagement from '../../components/StudentManagement';
 
 const CourseDetail = () => {
     const { id } = useParams();
@@ -13,7 +14,7 @@ const CourseDetail = () => {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('content');
     const [createModuleTab, setCreateModuleTab] = useState('');
-    const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);      
 
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [showActivitySelector, setShowActivitySelector] = useState(false);
@@ -133,10 +134,10 @@ const CourseDetail = () => {
 
         if (module.moduleType === 'resource_url' || module.moduleType === 'resource_file') {   
             specificContent = <ResourseModule module={module} />;      
-        } else if (module.moduleType === 'assignment') {
+        }
+         else if (module.moduleType === 'assignment') {
             specificContent = <AssignmentModule module={module} />;
         }
-
         return <div>{specificContent}</div>;
     };
 
@@ -288,6 +289,12 @@ const CourseDetail = () => {
                         </div>
                     ))}
                 </div>
+            )}
+            {activeTab === 'student' && (
+                <StudentManagement 
+                    courseId={course.id} 
+                    canEdit={canEdit} // Truyền quyền sửa để hiện nút Thêm/Xóa
+                />
             )}
         </div>
     );

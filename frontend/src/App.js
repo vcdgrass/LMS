@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
@@ -11,6 +11,8 @@ import TeacherLayout from './layouts/TeacherLayout';
 import TeacherDashboard from './pages/teacher/Dashboard';
 import CreateCourse from './pages/teacher/CreateCourse';
 import CourseDetail from './pages/course/CourseDetail';
+import StudentDashboard from './pages/student/Dashboard';
+import StudentLayout from './layouts/StudentLayout';
 
 
 // Ví dụ về component bảo vệ Route (chỉ cho phép user đã login)
@@ -51,6 +53,17 @@ const App = () => {
 
                         </Route>
                         <Route path="/course/:id" element={<CourseDetail />} />
+                    </Route>
+
+                    <Route element={<PrivateRoute allowedRoles={['student']} />}>
+                        <Route path="/student" element={<StudentLayout />}>
+                            <Route path="dashboard" element={<StudentDashboard />} />
+                            {/* Mặc định redirect về dashboard nếu vào /student */}
+                            <Route index element={<Navigate to="/student/dashboard" replace />} />
+                        </Route>
+                        {/* Reuse CourseDetail cho student xem nội dung */}
+                        {/* Lưu ý: Cần đảm bảo CourseDetail xử lý logic hiển thị phù hợp cho student */}
+                        <Route path="/course/:id" element={<CourseDetail />} /> 
                     </Route>
                 </Routes>
             </Router>

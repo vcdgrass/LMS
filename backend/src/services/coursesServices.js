@@ -204,6 +204,131 @@ const deleteModule = async (moduleId, type) => {
     }
 };
 
+const submitAssignment = async (userId, assignmentId, file) => {
+    // 1. Kiểm tra assignment có tồn tại không
+    const assignment = await prisma.moduleAssignment.findUnique({
+        where: { id: parseInt(assignmentId) }
+    });
+
+    if (!assignment) {
+        throw new Error("Bài tập không tồn tại.");
+    }
+
+    // 2. Tính toán nộp muộn (isLate)
+    let isLate = false;
+    if (assignment.dueDate && new Date() > new Date(assignment.dueDate)) {
+        isLate = true;
+    }
+
+    // 3. Tạo record Submission
+    // Lưu ý: userId lấy từ token, assignmentId lấy từ params
+    const submission = await prisma.assignmentSubmission.create({
+        data: {
+            assignmentId: parseInt(assignmentId),
+            userId: parseInt(userId),
+            filePath: file.path, // Đường dẫn file đã lưu trên server
+            submittedAt: new Date(),
+            isLate: isLate
+        }
+    });
+
+    return submission;
+};
+
+const getEnrolledCourses = async (studentId) => {
+    return await prisma.course.findMany({
+        where: {
+            enrollments: {
+                some: {
+                    userId: parseInt(studentId)
+                }
+            }
+        },
+        include: {
+            category: true,
+            // Lấy thông tin giảng viên để hiển thị
+            teacherCourses: {
+                include: {
+                    user: {
+                        select: { username: true, email: true }
+                    }
+                }
+            },
+            // Đếm số bài học để tính tiến độ (cơ bản)
+            _count: {
+                select: { 
+                    sections: true // Hoặc query sâu hơn để đếm modules
+                }
+            }
+        }
+    });
+};
+
+// Lấy danh sách học sinh trong khóa học
+const getStudentsInCourse = async (courseId) => {
+    return await prisma.enrollment.findMany({
+        where: {
+            courseId: parseInt(courseId),
+            role: 'student' // Chỉ lấy role student
+        },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    username: true,
+                    email: true,
+                    isLocked: true
+                }
+            }
+        }
+    });
+};
+
+// Thêm học sinh vào khóa học bằng Email
+const addStudentToCourse = async (courseId, email) => {
+    // 1. Tìm user theo email
+    const student = await prisma.user.findUnique({
+        where: { email: email }
+    });
+
+    if (!student) {
+        throw new Error("Không tìm thấy người dùng với email này.");
+    }
+
+    // 2. Kiểm tra xem đã tham gia chưa
+    const existingEnrollment = await prisma.enrollment.findUnique({
+        where: {
+            userId_courseId: {
+                userId: student.id,
+                courseId: parseInt(courseId)
+            }
+        }
+    });
+
+    if (existingEnrollment) {
+        throw new Error("Học viên này đã tham gia khóa học.");
+    }
+
+    // 3. Tạo enrollment
+    return await prisma.enrollment.create({
+        data: {
+            userId: student.id,
+            courseId: parseInt(courseId),
+            role: 'student'
+        }
+    });
+};
+
+// Xóa học sinh khỏi khóa học
+const removeStudentFromCourse = async (courseId, studentId) => {
+    return await prisma.enrollment.deleteMany({
+        where: {
+            userId: parseInt(studentId),
+            courseId: parseInt(courseId)
+        }
+    });
+};
+
 module.exports = {
     createCourse,
     getTeachingCourses,
@@ -213,4 +338,9 @@ module.exports = {
     getModuleById,
     deleteSection, 
     deleteModule,
+    submitAssignment,
+    getEnrolledCourses,
+    getStudentsInCourse,
+    addStudentToCourse,
+    removeStudentFromCourse,
 };

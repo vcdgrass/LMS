@@ -1,5 +1,6 @@
 const { get } = require('../routes/coursesRoute');
 const coursesService = require('../services/coursesServices');
+const { prisma } = require('../utils/db');
 
 const getCoursesByTeacher = async (req, res) => {
     try {
@@ -115,8 +116,102 @@ const deleteModule = async (req, res) => {
         console.error(error);
         resizeBy.status(500).json ({ message: "Lỗi xoá bài học."});
     }
-}
+};
 
+const submitAssignment = async (req, res) => {
+    try {
+        const assignmentId = Number(req.params.assignmentId);
+        const userId = Number(req.user.userId); // hoặc req.user.id tùy middleware
+        const file = req.file;
+
+        if (isNaN(assignmentId) || isNaN(userId)) {
+            return res.status(400).json({ message: "assignmentId hoặc userId không hợp lệ" });
+        }
+
+        console.log("assignmentId: ", assignmentId);
+
+        // 1. Kiểm tra assignment có tồn tại không
+        const assignment = await prisma.moduleAssignment.findUnique({
+            where: { id: assignmentId }
+        });
+
+        if (!assignment) {
+            return res.status(404).json({ message: "Bài tập không tồn tại." });
+        }
+
+        // 2. Tính toán nộp muộn
+        const isLate = assignment.dueDate && new Date() > new Date(assignment.dueDate);
+
+        // 3. Tạo record Submission
+        const submission = await prisma.assignmentSubmission.create({
+            data: {
+                assignmentId,
+                userId,
+                filePath: file.path,
+                submittedAt: new Date(),
+                isLate
+            }
+        });
+
+        return res.json(submission); // gửi response về client
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: "Lỗi server khi nộp bài." });
+    }
+};
+
+
+const getStudentCourses = async (req, res) => {
+    try {
+        // req.user.userId lấy từ middleware verifyToken
+        const { studentId } = req.params; 
+        
+        const courses = await coursesService.getEnrolledCourses(studentId);
+        res.status(200).json(courses);
+    } catch (error) {
+        console.error("Lỗi lấy khóa học sinh viên:", error);
+        res.status(500).json({ message: "Lỗi máy chủ khi tải khóa học." });
+    }
+};
+
+// [MỚI] Lấy danh sách học sinh
+const getStudents = async (req, res) => {
+    try {
+        const { id } = req.params; // courseId
+        const students = await coursesService.getStudentsInCourse(id);
+        res.status(200).json(students);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Lỗi lấy danh sách học viên." });
+    }
+};
+
+// [MỚI] Thêm học sinh
+const addStudent = async (req, res) => {
+    try {
+        const { id } = req.params; // courseId
+        const { email } = req.body;
+
+        if (!email) return res.status(400).json({ message: "Vui lòng nhập email." });
+
+        await coursesService.addStudentToCourse(id, email);
+        res.status(201).json({ message: "Thêm học viên thành công!" });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || "Lỗi khi thêm học viên." });
+    }
+};
+
+// [MỚI] Xóa học sinh
+const removeStudent = async (req, res) => {
+    try {
+        const { id, studentId } = req.params;
+        await coursesService.removeStudentFromCourse(id, studentId);
+        res.status(200).json({ message: "Đã xóa học viên khỏi lớp." });
+    } catch (error) {
+        res.status(500).json({ message: "Lỗi khi xóa học viên." });
+    }
+};
 module.exports = {
     getCoursesByTeacher,
     createCourse,
@@ -126,4 +221,9 @@ module.exports = {
     getModuleById,
     deleteSection,
     deleteModule,
+    submitAssignment,
+    getStudentCourses,
+    getStudents,
+    addStudent,
+    removeStudent,
 };
