@@ -135,6 +135,8 @@ model AssignmentSubmission {
   submittedAt  DateTime?        @default(now()) @map("submitted_at") @db.Timestamptz(6)
   filePath     String?          @map("file_path")
   isLate       Boolean?         @default(false) @map("is_late")
+  grade        Decimal?         @db.Decimal(5, 2) // Điểm số
+  feedback     String?          // Nhận xét của giáo viên
   assignment   ModuleAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 

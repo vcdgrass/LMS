@@ -42,8 +42,8 @@ const coursesApi = {
             },
         });
     },
-    getEnrolledCourses: (studentId) => {
-        return axiosClient.get(`/courses/student/${studentId}`);
+    getEnrolledCourses: () => {
+        return axiosClient.get(`/courses/my-courses`);
     },
     getStudents: (courseId) => {
         return axiosClient.get(`/courses/${courseId}/students`);
@@ -53,6 +53,13 @@ const coursesApi = {
     },
     removeStudent: (courseId, studentId) => {
         return axiosClient.delete(`/courses/${courseId}/students/${studentId}`);
+    },
+    getSubmissions: (moduleId) => {
+        return axiosClient.get(`/courses/modules/${moduleId}/submissions`);
+    },
+    updateGrade: (moduleId, data) => {
+        // data: { studentId, score, feedback }
+        return axiosClient.post(`/courses/modules/${moduleId}/grade`, data);
     }
 };
 

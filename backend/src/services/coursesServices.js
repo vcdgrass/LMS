@@ -49,7 +49,7 @@ const getTeachingCourses = async (teacherId) => {
         }
     });
     return courses;
-}
+};
 
 /**
  * Lấy chi tiết khóa học kèm nội dung (Sections > Modules)
@@ -236,6 +236,10 @@ const submitAssignment = async (userId, assignmentId, file) => {
 };
 
 const getEnrolledCourses = async (studentId) => {
+    const id = parseInt(studentId);
+    if (isNaN(id)) {
+        throw new Error("Student ID không hợp lệ.");
+    }
     return await prisma.course.findMany({
         where: {
             enrollments: {
@@ -329,6 +333,87 @@ const removeStudentFromCourse = async (courseId, studentId) => {
     });
 };
 
+// Lấy danh sách bài nộp và điểm của một Module (Assignment)
+const getSubmissionsByModule = async (moduleId) => {
+    // 1. Lấy thông tin module để biết assignmentId (contentId)
+    const module = await prisma.courseModule.findUnique({
+        where: { id: parseInt(moduleId) }
+    });
+
+    if (!module || module.moduleType !== 'assignment') {
+        throw new Error("Module không hợp lệ hoặc không phải bài tập.");
+    }
+
+    // 2. Lấy danh sách học viên trong khóa học này
+    // Cần lấy courseId từ module -> section -> course để query enrollment (hoặc query ngược)
+    // Cách nhanh: Lấy tất cả user đã nộp bài HOẶC đã được chấm điểm
+    
+    // Ở đây ta lấy danh sách Submissions kèm theo thông tin User và Grade (nếu có)
+    const submissions = await prisma.assignmentSubmission.findMany({
+        where: {
+            assignmentId: module.contentId
+        },
+        include: {
+            user: {
+                select: { id: true, username: true, email: true }
+            }
+        }
+    });
+
+    // Lấy bảng điểm riêng cho module này (vì có thể có user chưa nộp nhưng đã bị chấm 0 điểm)
+    const grades = await prisma.grade.findMany({
+        where: { moduleId: parseInt(moduleId) }
+    });
+
+    // Merge data: Submission + Grade
+    // Trả về danh sách submission, map thêm điểm vào
+    const result = submissions.map(sub => {
+        const grade = grades.find(g => g.userId === sub.userId);
+        return {
+            ...sub,
+            score: grade ? grade.score : null,
+            feedback: grade ? grade.feedback : null
+        };
+    });
+
+    return result;
+};
+
+// Chấm điểm (Tạo mới hoặc Cập nhật)
+const updateGrade = async (graderId, moduleId, studentId, score, feedback) => {
+    // Tìm module để lấy courseId (cần cho bảng Grade)
+    const moduleInfo = await prisma.courseModule.findUnique({
+        where: { id: parseInt(moduleId) },
+        include: { section: true }
+    });
+
+    if (!moduleInfo) throw new Error("Module không tồn tại");
+
+    return await prisma.grade.upsert({
+        where: {
+            userId_moduleId: {
+                userId: parseInt(studentId),
+                moduleId: parseInt(moduleId)
+            }
+        },
+        update: {
+            score: parseFloat(score),
+            feedback: feedback,
+            graderId: parseInt(graderId),
+            gradedAt: new Date()
+        },
+        create: {
+            courseId: moduleInfo.section.courseId,
+            moduleId: parseInt(moduleId),
+            userId: parseInt(studentId),
+            score: parseFloat(score),
+            feedback: feedback,
+            graderId: parseInt(graderId),
+            gradedAt: new Date()
+        }
+    });
+};
+
 module.exports = {
     createCourse,
     getTeachingCourses,
@@ -343,4 +428,6 @@ module.exports = {
     getStudentsInCourse,
     addStudentToCourse,
     removeStudentFromCourse,
+    getSubmissionsByModule,
+    updateGrade,
 };
