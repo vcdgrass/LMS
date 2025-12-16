@@ -1,14 +1,14 @@
 // frontend/src/components/AssignmentModule.jsx
 import React, { useState, useEffect } from 'react';
 import coursesApi from '../api/coursesApi';
-import { useAuth } from '../contexts/AuthContext'; // Import AuthContext
-import TeacherGrading from './TeacherGrading'; // Import component mới tạo
+import { useAuth } from '../contexts/AuthContext';
+import TeacherGrading from './TeacherGrading';
 
 const AssignmentModule = ({ module }) => {
-  const { user } = useAuth(); // Lấy user hiện tại
+  const { user } = useAuth();
   const [assignmentData, setAssignmentData] = useState(null);
+  // const [assignmentSummitted, setAssignmentSummitted] = useState(false);
   
-  // ... (giữ nguyên state upload file của Student) ...
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');

@@ -7,12 +7,10 @@ const getAllUserService = async () => {
             username: true,
             email: true,
             role: true,
-            isLocked: false,
+            isLocked: true,
         },
     });
-
 };
-
 
 module.exports = {
     getAllUserService,

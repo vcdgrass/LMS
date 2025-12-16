@@ -112,6 +112,7 @@ model ModuleAssignment {
 
 model ModuleQuiz {
   id               Int            @id @default(autoincrement()) @map("id_quiz")
+  description      String?
   timeLimitMinutes Int?           @map("time_limit_minutes")
   gradePassing     Decimal?       @map("grade_passing") @db.Decimal(5, 2)
   attempts         QuizAttempt[]
@@ -147,7 +148,11 @@ model QuizQuestion {
   id             Int              @id @default(autoincrement()) @map("id_question")
   quizId         Int              @map("quiz_id")
   questionText   String           @map("question_text")
-  type           QuestionType
+  type           QuestionType     @default(multiple_choice)
+  imageUrl       String?          @map("image_url")        // Ảnh minh họa cho câu hỏi
+  timeLimit      Int              @default(20) @map("time_limit") // Thời gian cho riêng câu này (giây)
+  points         Int              @default(1000)           // Điểm số tối đa của câu này
+  orderIndex     Int              @default(0)              // Thứ tự câu hỏi
   attemptAnswers AttemptAnswer[]
   options        QuestionOption[]
   quiz           ModuleQuiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)

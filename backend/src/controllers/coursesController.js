@@ -114,7 +114,7 @@ const deleteModule = async (req, res) => {
         res.status(200).json({ message: "Xoá bài học thành công."});
     } catch (error) {
         console.error(error);
-        resizeBy.status(500).json ({ message: "Lỗi xoá bài học."});
+        res.status(500).json ({ message: "Lỗi xoá bài học."});
     }
 };
 

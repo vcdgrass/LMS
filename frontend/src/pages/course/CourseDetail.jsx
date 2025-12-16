@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, FileText, Video, CheckSquare, Plus, Trash2, Edit } from 'lucide-react'; // Import icons
 import coursesApi from '../../api/coursesApi';
 import { useAuth } from '../../contexts/AuthContext';
+import QuizCreator from '../../components/QuizCreator';
+import QuizModule from '../../components/QuizModule';
 
 // Import các component hiển thị nội dung
 import AssignmentModule from '../../components/AssignmentModule';
@@ -32,7 +34,8 @@ const CourseDetail = () => {
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [showActivitySelector, setShowActivitySelector] = useState(false);
     const [showModuleForm, setShowModuleForm] = useState(false);
-    const [createModuleTab, setCreateModuleTab] = useState(''); // Loại module đang tạo
+    const [createModuleTab, setCreateModuleTab] = useState('');
+    const [showQuizCreator, setShowQuizCreator] = useState(false);
     
     const [newSectionTitle, setNewSectionTitle] = useState('');
     const [activeSectionId, setActiveSectionId] = useState(null);
@@ -143,10 +146,41 @@ const CourseDetail = () => {
 
     // Chọn loại hoạt động -> Mở Form nhập liệu
     const handleSelectType = (type) => {
-        setModuleData({ type, title: '', url: '', description: '', dueDate: '', timeLimitMinutes: '' });
-        setCreateModuleTab(type);
-        setShowActivitySelector(false);
-        setShowModuleForm(true);
+        if (type === 'quiz') {
+            setShowActivitySelector(false);
+            setShowQuizCreator(true); // Bật chế độ tạo Quiz Kahoot
+        } else {
+            // Logic cũ cho resource/assignment
+            setModuleData({ type, title: '', url: '', description: '', dueDate: '' });
+            setCreateModuleTab(type);
+            setShowActivitySelector(false);
+            setShowModuleForm(true);
+        }
+    };
+
+    const handleSaveQuiz = async (quizData) => {
+        // quizData nhận từ QuizCreator: { title, questions: [...] }
+        setSubmitting(true);
+        try {
+            const payload = {
+                title: quizData.title,
+                type: 'quiz',
+                description: `Bài kiểm tra gồm ${quizData.questions.length} câu hỏi.`,
+                questions: quizData.questions // Gửi mảng câu hỏi xuống backend
+            };
+            
+            // Gọi API tạo module
+            await coursesApi.createModule(activeSectionId, payload);
+            
+            alert("Tạo bài kiểm tra thành công!");
+            setShowQuizCreator(false); // Đóng giao diện Quiz
+            fetchCourseDetail();       // Tải lại dữ liệu khóa học
+        } catch (error) {
+            console.error("Lỗi tạo quiz:", error);
+            alert("Lỗi khi tạo quiz: " + (error.response?.data?.message || "Lỗi không xác định"));
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     // Submit tạo Module mới
@@ -343,9 +377,7 @@ const CourseDetail = () => {
                                         )}
                                         
                                         {activeModule.moduleType === 'quiz' && (
-                                            <div className="p-4 bg-purple-50 border border-purple-100 rounded text-center">
-                                                <p>Chức năng Quiz đang phát triển.</p>
-                                            </div>
+                                            <QuizModule module={activeModule} />
                                         )}
                                     </div>
                                 </div>
@@ -467,6 +499,12 @@ const CourseDetail = () => {
                         </div>
                     </form>
                 </div>
+            )}
+            {showQuizCreator && (
+                <QuizCreator 
+                    onSave={handleSaveQuiz} 
+                    onCancel={() => setShowQuizCreator(false)} 
+                />
             )}
         </div>
     );

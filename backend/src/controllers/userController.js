@@ -5,8 +5,14 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const csv = require('csv-parser');
 
-const getAllUsers = async () => {
-    return await getAllUserService();
+const getAllUsers = async (req, res) => {
+    try {
+        const userRecord = await getAllUserService();
+        return res.status(200).json(userRecord);
+    } catch {
+        console.log(error);
+        res.status(500).json({massage: "Lỗi máy chủ"});
+    }
 };
 
 const createUser = async (req, res) => {

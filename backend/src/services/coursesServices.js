@@ -124,15 +124,31 @@ const createModule = async (sectionId, moduleData) => {
       }
     });
   } else if (moduleData.type === 'quiz') {
+    // moduleData.questions là mảng câu hỏi từ Frontend gửi lên
     content = await prisma.moduleQuiz.create({
       data: {
-        timeLimitMinutes: moduleData.timeLimitMinutes || null,
         description: moduleData.description || '',
+        timeLimitMinutes: parseInt(moduleData.timeLimitMinutes) || null,
         gradePassing: moduleData.gradePassing || null,
+        // Tạo luôn câu hỏi và đáp án lồng nhau
+        questions: {
+          create: moduleData.questions?.map((q, index) => ({
+              questionText: q.questionText,
+              type: q.type || 'multiple_choice',
+              timeLimit: q.timeLimit || 20,
+              points: q.points || 1000,
+              orderIndex: index,
+              options: {
+                create: q.options.map(opt => ({
+                  optionText: opt.optionText,
+                  isCorrect: opt.isCorrect
+                }))
+              }
+          }))
+        }
       }
     });
   }
-
   const courseModule = await prisma.courseModule.create({
     data: {
       sectionId: parseInt(sectionId),
@@ -162,8 +178,17 @@ const getModuleById = async (id, type) => {
             where: { id: parseInt(id) } 
         });
     } else if (type === 'quiz') {
+        // include để lấy questions và options
         moduleContent = await prisma.moduleQuiz.findUnique({
-            where: { id: parseInt(id) } 
+            where: { id: parseInt(id) },
+            include: {
+                questions: {
+                    orderBy: { orderIndex: 'asc' }, // Sắp xếp theo thứ tự
+                    include: {
+                        options: true // Lấy danh sách đáp án
+                    }
+                }
+            }
         });
     }
     return moduleContent;
@@ -175,31 +200,45 @@ const deleteSection = async (sectionId) => {
         where: { id: parseInt(sectionId) }
     });
 };
-
 const deleteModule = async (moduleId, type) => {
     try {
-        const contentId = await prisma.courseModule.findUnique({
-            where: { id: parseInt(moduleId)},
-            select: { contentId: true, },
+        // 1. Tìm module để lấy contentId TRƯỚC KHI XÓA
+        const moduleRecord = await prisma.courseModule.findUnique({
+            where: { id: parseInt(moduleId) },
+            select: { contentId: true },
         });
+
+        if (!moduleRecord) {
+            throw new Error("Bài học không tồn tại.");
+        }
+
+        const { contentId } = moduleRecord; // Lấy giá trị ID ra khỏi object
+
+        // 2. Xoá CourseModule trước
         await prisma.courseModule.delete({
             where: { id: parseInt(moduleId) }
         });
-        console.log("contentId: ", contentId);
-        if (type === 'resource_url' || type === 'resource_file') {
-            await prisma.moduleResource.delete({
-                where: { id: parseInt(contentId) }
-            });
-        } else if (type === 'assignment') {
-            await prisma.moduleAssignment.delete({
-                where: { id: parseInt(contentId) }
-            });
-        } else if (type === 'quiz') {
-            await prisma.moduleQuiz.delete({
-                where: { id: parseInt(contentId) }
-            });
+
+        // 3. Xoá nội dung tương ứng (Resource/Assignment/Quiz)
+        // Kiểm tra nếu có contentId hợp lệ
+        if (contentId) {
+            if (type === 'resource_url' || type === 'resource_file') {
+                await prisma.moduleResource.delete({
+                    where: { id: parseInt(contentId) }
+                });
+            } else if (type === 'assignment') {
+                await prisma.moduleAssignment.delete({
+                    where: { id: parseInt(contentId) }
+                });
+            } else if (type === 'quiz') {
+                await prisma.moduleQuiz.delete({
+                    where: { id: parseInt(contentId) }
+                });
+            }
         }
     } catch (error) {
+        // Log lỗi chi tiết để debug nếu cần
+        console.error("Delete Module Error Detail:", error);
         throw new Error('Lỗi khi xoá bài học: ' + error.message);
     }
 };
