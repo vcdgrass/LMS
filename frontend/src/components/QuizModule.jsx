@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle, XCircle, AlertCircle, Play, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Clock, CheckCircle, Play, ArrowRight } from 'lucide-react'; // Đã bỏ các icon không dùng để code gọn hơn
 import coursesApi from '../api/coursesApi';
 
 const QuizModule = ({ module }) => {
@@ -7,16 +7,26 @@ const QuizModule = ({ module }) => {
     const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState('intro'); // intro | playing | result
     const [currentQIndex, setCurrentQIndex] = useState(0);
-    const [selectedAnswers, setSelectedAnswers] = useState({}); // { [questionId]: optionId }
+    const [selectedAnswers, setSelectedAnswers] = useState({});
     const [score, setScore] = useState(0);
 
-    // 1. Lấy dữ liệu Quiz từ API
+    const [showFeedback, setShowFeedback] = useState(false);
+    // const [isCorrectEntry, setIsCorrectEntry] = useState(false); // (Có thể bỏ nếu chưa dùng)
+    const [randomMsg, setRandomMsg] = useState("");
+
+    // State lưu thời gian còn lại
+    const [timeLeft, setTimeLeft] = useState(0);
+
+    // Ref để lưu hàm handleNext mới nhất
+    const handleNextRef = useRef(null);
+
+    // 1. Lấy dữ liệu Quiz
     useEffect(() => {
         const fetchQuiz = async () => {
             try {
-                // module.contentId là ID của bảng Module_Quiz
                 const res = await coursesApi.getModuleById(module.contentId, 'quiz');
-                setQuizData(res.data);
+                // Kiểm tra kỹ cấu trúc dữ liệu trả về từ API
+                setQuizData(res.data || res); 
             } catch (error) {
                 console.error("Lỗi tải quiz:", error);
             } finally {
@@ -26,58 +36,151 @@ const QuizModule = ({ module }) => {
         fetchQuiz();
     }, [module.contentId]);
 
-    // 2. Xử lý khi chọn đáp án
-    const handleSelectOption = (questionId, optionId) => {
-        // Chỉ cho chọn nếu đang làm bài (chưa nộp)
-        if (status !== 'result') {
-            setSelectedAnswers(prev => ({
-                ...prev,
-                [questionId]: optionId
-            }));
-        }
-    };
-
-    // 3. Nộp bài và tính điểm (Logic đơn giản tại Client để demo)
-    const handleSubmit = () => {
-        if (!window.confirm("Bạn chắc chắn muốn nộp bài?")) return;
-        
-        let correctCount = 0;
+    // 2. Hàm nộp bài
+    const handleSubmit = useCallback(() => {
         let totalPoints = 0;
 
-        quizData.questions.forEach(q => {
-            const userAnsId = selectedAnswers[q.id];
-            const correctOpt = q.options.find(o => o.isCorrect);
-            
-            if (userAnsId === correctOpt?.id) {
-                correctCount++;
-                totalPoints += (q.points || 0);
-            }
-        });
+        // Thêm optional chaining ?. để an toàn
+        if (quizData?.questions) {
+            quizData.questions.forEach(q => {
+                const userAnsId = selectedAnswers[q.id];
+                const correctOpt = q.options.find(o => o.isCorrect);
+
+                if (userAnsId === correctOpt?.id) {
+                    totalPoints += (q.points || 0);
+                }
+            });
+        }
 
         setScore(totalPoints);
         setStatus('result');
+    }, [quizData, selectedAnswers]);
+
+    // 3. Hàm chuyển câu (được bọc useCallback)
+    const handleNext = useCallback(() => {
+        if (!quizData?.questions) return;
+
+        if (currentQIndex < quizData.questions.length - 1) {
+            setCurrentQIndex(prev => prev + 1);
+        } else {
+            handleSubmit();
+        }
+    }, [currentQIndex, quizData, handleSubmit]);
+
+    // Cập nhật ref mỗi khi handleNext thay đổi
+    useEffect(() => {
+        handleNextRef.current = handleNext;
+    }, [handleNext]);
+
+    // Danh sách lời động viên
+    const encouragement = {
+        correct: ["Quá siêu luôn! 🌟", "Đúng rồi, con giỏi lắm! 🎉", "Tuyệt vời! ☀️", "Thông minh quá! 💎"],
+        wrong: ["Tiếc quá, thử lại nhé! 💪", "Cố gắng lên! 🌈", "Không sao đâu! ✨", "Bình tĩnh nhé! 🎈"]
     };
 
-    // Helper: Lấy màu nền cho Option khi hiển thị kết quả
+    const playFeedbackSound = (isCorrect) => {
+        try {
+            const audio = new Audio(
+                isCorrect
+                    ? 'https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3'
+                    : 'https://assets.mixkit.co/active_storage/sfx/2003/2003-preview.mp3'
+            );
+            audio.volume = 0.5;
+            audio.play().catch(e => console.log("Audio play blocked:", e));
+        } catch (e) {
+            console.error("Audio error", e);
+        }
+    };
+
+    // 4.1. Effect 1: RESET thời gian khi đổi câu hỏi
+    useEffect(() => {
+        if (status === 'playing' && quizData?.questions?.[currentQIndex]) {
+            const time = quizData.questions[currentQIndex].timeLimit || 20;
+            setTimeLeft(time);
+        }
+    }, [currentQIndex, status, quizData]);
+
+    // 4.2. Effect 2: Đếm ngược
+    useEffect(() => {
+        if (status !== 'playing') return;
+
+        const timerId = setInterval(() => {
+            setTimeLeft((prev) => {
+                if (prev <= 1) {
+                    clearInterval(timerId);
+                    // Gọi qua Ref an toàn
+                    if (handleNextRef.current) {
+                        handleNextRef.current();
+                    }
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timerId);
+    }, [status]);
+
+    // 5. Xử lý chọn đáp án
+    const handleSelectOption = (questionId, optionId) => {
+        if (showFeedback || !quizData?.questions) return;
+
+        const currentQ = quizData.questions[currentQIndex];
+        const selectedOption = currentQ.options.find(opt => opt.id === optionId);
+        const isCorrect = selectedOption?.isCorrect; // Thêm ?. an toàn
+
+        // Lưu đáp án
+        setSelectedAnswers(prev => ({ ...prev, [questionId]: optionId }));
+
+        // Phản hồi
+        // setIsCorrectEntry(isCorrect);
+        const msgList = isCorrect ? encouragement.correct : encouragement.wrong;
+        setRandomMsg(msgList[Math.floor(Math.random() * msgList.length)]);
+        setShowFeedback(true);
+        playFeedbackSound(isCorrect);
+
+        // Chuyển câu sau 1.5s
+        setTimeout(() => {
+            setShowFeedback(false);
+            if (currentQIndex < quizData.questions.length - 1) {
+                setCurrentQIndex(prev => prev + 1);
+            } else {
+                // Xử lý câu cuối: Tính điểm thủ công để đảm bảo chính xác
+                let tempScore = 0;
+                quizData.questions.forEach(q => {
+                    // Ưu tiên lấy đáp án vừa chọn (nếu là câu hiện tại), ngược lại lấy từ state
+                    const userAnsId = (q.id === questionId) ? optionId : selectedAnswers[q.id];
+                    const correctOpt = q.options.find(o => o.isCorrect);
+                    if (userAnsId === correctOpt?.id) {
+                        tempScore += (q.points || 0);
+                    }
+                });
+                setScore(tempScore);
+                setStatus('result');
+            }
+        }, 1500);
+    };
+
+    // Helper UI Class
     const getOptionClass = (q, opt) => {
         const isSelected = selectedAnswers[q.id] === opt.id;
         const isCorrect = opt.isCorrect;
 
         if (status === 'result') {
-            if (isCorrect) return 'bg-green-100 border-green-500 text-green-800'; // Đáp án đúng
-            if (isSelected && !isCorrect) return 'bg-red-100 border-red-500 text-red-800'; // Chọn sai
-            return 'bg-gray-50 border-gray-200 opacity-50'; // Các câu còn lại
+            if (isCorrect) return 'bg-green-100 border-green-500 text-green-800';
+            if (isSelected && !isCorrect) return 'bg-red-100 border-red-500 text-red-800';
+            return 'bg-gray-50 border-gray-200 opacity-50';
         }
 
-        // Trạng thái đang làm bài
         if (isSelected) return 'bg-indigo-100 border-indigo-500 ring-1 ring-indigo-500';
         return 'bg-white border-gray-200 hover:bg-gray-50';
     };
 
+    // --- RENDER ---
     if (loading) return <div className="p-8 text-center text-gray-500">Đang tải đề thi...</div>;
     if (!quizData) return <div className="p-8 text-center text-red-500">Không tìm thấy dữ liệu.</div>;
 
-    // --- MÀN HÌNH CHÀO (INTRO) ---
+    // --- INTRO SCREEN ---
     if (status === 'intro') {
         return (
             <div className="flex flex-col items-center justify-center p-10 bg-white rounded-xl shadow-sm text-center border border-gray-100">
@@ -85,57 +188,45 @@ const QuizModule = ({ module }) => {
                     <Play size={40} className="text-indigo-600 ml-1" />
                 </div>
                 <h2 className="text-2xl font-bold text-gray-800 mb-2">{module.title}</h2>
-                <p className="text-gray-500 max-w-md mb-6">{quizData.description || "Hãy sẵn sàng để thử thách kiến thức của bạn!"}</p>
-                
-                <div className="flex gap-8 mb-8 text-sm text-gray-600 font-medium bg-gray-50 px-6 py-3 rounded-lg">
-                    <div className="flex items-center gap-2"><AlertCircle size={18} /> {quizData.questions.length} Câu hỏi</div>
-                    <div className="flex items-center gap-2"><Clock size={18} /> {quizData.timeLimitMinutes || 15} Phút</div>
-                </div>
-
-                <button 
+                <p className="text-gray-500 max-w-md mb-6">{quizData.description || "Sẵn sàng thử thách?"}</p>
+                <button
                     onClick={() => setStatus('playing')}
-                    className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-bold text-lg shadow-lg hover:shadow-xl transition transform hover:-translate-y-1"
+                    className="px-8 py-3 bg-indigo-600 text-white rounded-full font-bold shadow-lg hover:bg-indigo-700 transition"
                 >
-                    Bắt đầu làm bài
+                    Bắt đầu ngay
                 </button>
             </div>
         );
     }
 
-    // --- MÀN HÌNH KẾT QUẢ ---
+    // --- RESULT SCREEN ---
     if (status === 'result') {
-        const totalQ = quizData.questions.length;
-        const correctCount = quizData.questions.filter(q => selectedAnswers[q.id] === q.options.find(o => o.isCorrect)?.id).length;
-        
+        const questions = quizData.questions || [];
+        const totalQ = questions.length;
+        const correctCount = questions.filter(q => selectedAnswers[q.id] === q.options.find(o => o.isCorrect)?.id).length;
+
         return (
             <div className="p-6 bg-white rounded-lg shadow-sm">
                 <div className="text-center mb-8 border-b pb-6">
-                    <h3 className="text-2xl font-bold text-gray-800 mb-2">Kết quả bài làm</h3>
-                    <div className="text-6xl font-black text-indigo-600 mb-2">{score} <span className="text-xl text-gray-400 font-normal">điểm</span></div>
-                    <p className="text-gray-600 font-medium">
-                        Bạn đã trả lời đúng <span className="text-green-600">{correctCount}</span> / {totalQ} câu hỏi
-                    </p>
-                    <button 
-                        onClick={() => {setStatus('intro'); setSelectedAnswers({}); setScore(0); setCurrentQIndex(0)}}
-                        className="mt-4 text-indigo-600 hover:underline text-sm font-semibold"
+                    <h3 className="text-2xl font-bold text-gray-800">Kết quả</h3>
+                    <div className="text-5xl font-black text-indigo-600 my-4">{score} điểm</div>
+                    <p className="text-gray-600">Đúng {correctCount} / {totalQ} câu</p>
+                    <button
+                        onClick={() => { setStatus('intro'); setSelectedAnswers({}); setScore(0); setCurrentQIndex(0); }}
+                        className="mt-4 text-indigo-600 font-bold hover:underline"
                     >
-                        Làm lại bài này
+                        Làm lại
                     </button>
                 </div>
-                
-                {/* Review lại đáp án */}
                 <div className="space-y-6">
-                    {quizData.questions.map((q, idx) => (
+                    {questions.map((q, idx) => (
                         <div key={q.id} className="border-b border-gray-100 pb-6 last:border-0">
-                            <h4 className="font-bold text-gray-800 mb-3 flex gap-2">
-                                <span className="text-indigo-500">Câu {idx + 1}:</span> {q.questionText}
-                            </h4>
+                            <h4 className="font-bold text-gray-800 mb-3"><span className="text-indigo-500">Câu {idx + 1}:</span> {q.questionText}</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {q.options.map(opt => (
-                                    <div key={opt.id} className={`p-3 rounded border text-sm font-medium flex justify-between items-center ${getOptionClass(q, opt)}`}>
+                                    <div key={opt.id} className={`p-3 rounded border text-sm font-medium flex justify-between ${getOptionClass(q, opt)}`}>
                                         {opt.optionText}
                                         {opt.isCorrect && <CheckCircle size={16} />}
-                                        {(selectedAnswers[q.id] === opt.id && !opt.isCorrect) && <XCircle size={16} />}
                                     </div>
                                 ))}
                             </div>
@@ -146,28 +237,71 @@ const QuizModule = ({ module }) => {
         );
     }
 
-    // --- MÀN HÌNH LÀM BÀI (PLAYING) ---
+    // --- PLAYING SCREEN (SAFE RENDER) ---
+    // Kiểm tra an toàn: Nếu không có câu hỏi thì không render tiếp
+    if (!quizData.questions || quizData.questions.length === 0) {
+        return <div className="p-8 text-center text-yellow-500">Đề thi chưa có câu hỏi nào.</div>;
+    }
+
     const currentQ = quizData.questions[currentQIndex];
 
+    // Double check: Nếu currentQ undefined (lỗi index), render fallback
+    if (!currentQ) {
+        return <div className="p-8 text-center text-red-500">Lỗi hiển thị câu hỏi.</div>;
+    }
+
+    const totalTime = currentQ.timeLimit || 20;
+    const progressPercent = (timeLeft / totalTime) * 100;
+    
+    // Logic màu sắc thanh progress
+    let progressColor = 'bg-green-500';
+    if (progressPercent < 50) progressColor = 'bg-yellow-500';
+    if (progressPercent < 20) progressColor = 'bg-red-500';
+
+    const brightColors = [
+        'bg-red-500 hover:bg-red-600 border-red-700 text-white',
+        'bg-blue-500 hover:bg-blue-600 border-blue-700 text-white',
+        'bg-yellow-400 hover:bg-yellow-500 border-yellow-500 text-gray-900',
+        'bg-green-500 hover:bg-green-600 border-green-700 text-white'
+    ];
+
     return (
-        <div className="flex flex-col h-full bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
-            {/* Header: Progress & Timer */}
-            <div className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
-                <div className="text-sm font-bold text-gray-500">
-                    Câu hỏi {currentQIndex + 1} <span className="font-normal text-gray-400">/ {quizData.questions.length}</span>
+        <div className="flex flex-col h-full bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 relative">
+            {/* Feedback Overlay */}
+            {showFeedback && (
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black bg-opacity-40 animate-in fade-in duration-200">
+                    <div className="bg-white px-8 py-6 rounded-2xl shadow-2xl transform scale-110 text-center">
+                        <div className="text-4xl mb-2">{randomMsg.includes('Tiếc') ? '😢' : '🎉'}</div>
+                        <h3 className="text-2xl font-black text-indigo-600">{randomMsg}</h3>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2 text-orange-600 font-bold bg-orange-50 px-3 py-1 rounded-full text-xs">
-                    <Clock size={14} /> {currentQ.timeLimit || 20}s
+            )}
+
+            {/* Header: Progress Bar */}
+            <div className="bg-gray-50 pt-4 px-6 pb-2 border-b">
+                <div className="flex justify-between items-end mb-2">
+                    <div className="text-sm font-bold text-gray-500">
+                        Câu {currentQIndex + 1} <span className="font-normal text-gray-400">/ {quizData.questions.length}</span>
+                    </div>
+                    <div className="flex items-center gap-1 font-bold text-gray-700">
+                        <Clock size={16} /> {timeLeft}s
+                    </div>
+                </div>
+
+                <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
+                    <div
+                        className={`h-full ${progressColor} transition-all duration-1000 ease-linear`}
+                        style={{ width: `${progressPercent}%` }}
+                    />
                 </div>
             </div>
 
             {/* Question Content */}
             <div className="flex-1 p-6 md:p-10 flex flex-col items-center">
-                {/* Ảnh minh họa (nếu có) */}
                 {currentQ.imageUrl && (
-                    <img src={currentQ.imageUrl} alt="Quiz visual" className="max-h-64 rounded-lg shadow-sm mb-6 object-contain" />
+                    <img src={currentQ.imageUrl} alt="Quiz visual" className="max-h-56 rounded-lg shadow-sm mb-6 object-contain" />
                 )}
-                
+
                 <h3 className="text-xl md:text-2xl font-bold text-gray-800 text-center mb-8">
                     {currentQ.questionText}
                 </h3>
@@ -176,59 +310,52 @@ const QuizModule = ({ module }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-4xl">
                     {currentQ.options.map((opt, idx) => {
                         const isSelected = selectedAnswers[currentQ.id] === opt.id;
-                        // Màu sắc giả lập Kahoot cho 4 đáp án
-                        const kahootColors = [
-                            'border-l-8 border-l-red-500', 
-                            'border-l-8 border-l-blue-500', 
-                            'border-l-8 border-l-yellow-500', 
-                            'border-l-8 border-l-green-500'
-                        ];
-                        
                         return (
                             <button
                                 key={opt.id}
                                 onClick={() => handleSelectOption(currentQ.id, opt.id)}
+                                disabled={showFeedback} // Disable khi đang hiện feedback
                                 className={`
-                                    p-6 text-left rounded-lg shadow-sm border transition-all duration-200 flex items-center
-                                    ${kahootColors[idx % 4]}
-                                    ${isSelected 
-                                        ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-500 transform scale-[1.02]' 
-                                        : 'bg-white border-gray-200 hover:shadow-md hover:bg-gray-50'}
+                                    p-6 text-left rounded-2xl shadow-lg border-b-4 transition-all duration-200 
+                                    flex items-center min-h-[100px] relative overflow-hidden group
+                                    ${brightColors[idx % 4]} 
+                                    ${isSelected
+                                        ? 'ring-4 ring-offset-2 ring-indigo-500 transform scale-[1.02] z-10'
+                                        : 'hover:scale-[1.01] hover:brightness-110'}
+                                    ${showFeedback ? 'cursor-not-allowed opacity-90' : ''}
                                 `}
                             >
-                                <span className="font-bold text-lg text-gray-700">{opt.optionText}</span>
-                                {isSelected && <CheckCircle className="ml-auto text-indigo-600" size={20} />}
+                                <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-black bg-opacity-20 rounded-full mr-4 text-2xl">
+                                    {idx === 0 && '▲'}
+                                    {idx === 1 && '◆'}
+                                    {idx === 2 && '●'}
+                                    {idx === 3 && '■'}
+                                </div>
+
+                                <span className="font-black text-xl md:text-2xl break-words w-full">
+                                    {opt.optionText}
+                                </span>
+
+                                {isSelected && (
+                                    <div className="absolute top-2 right-2 bg-white rounded-full p-1">
+                                        <CheckCircle size={20} className="text-indigo-600" />
+                                    </div>
+                                )}
                             </button>
                         );
                     })}
                 </div>
             </div>
 
-            {/* Footer Navigation */}
-            <div className="p-4 border-t bg-gray-50 flex justify-between items-center">
-                <button 
-                    onClick={() => setCurrentQIndex(Math.max(0, currentQIndex - 1))}
-                    disabled={currentQIndex === 0}
-                    className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded disabled:opacity-50"
+            {/* Footer */}
+            <div className="p-4 border-t bg-gray-50 flex justify-end items-center gap-3">
+                <button
+                    onClick={handleNext}
+                    disabled={showFeedback}
+                    className="px-6 py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50"
                 >
-                    Quay lại
+                    {currentQIndex < quizData.questions.length - 1 ? 'Câu tiếp theo' : 'Nộp bài'} <ArrowRight size={18} />
                 </button>
-
-                {currentQIndex < quizData.questions.length - 1 ? (
-                    <button 
-                        onClick={() => setCurrentQIndex(currentQIndex + 1)}
-                        className="px-6 py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 flex items-center gap-2"
-                    >
-                        Câu tiếp theo <ArrowRight size={18} />
-                    </button>
-                ) : (
-                    <button 
-                        onClick={handleSubmit}
-                        className="px-6 py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700 shadow-md"
-                    >
-                        Nộp bài
-                    </button>
-                )}
             </div>
         </div>
     );

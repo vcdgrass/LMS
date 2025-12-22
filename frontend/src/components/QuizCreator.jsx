@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Image, Check, X, Clock, Award, Save } from 'lucide-react';
 
 const QuizCreator = ({ onSave, onCancel }) => {
-    // Mặc định 1 câu hỏi trống
     const defaultQuestion = {
         questionText: '',
         timeLimit: 20,
@@ -16,10 +15,8 @@ const QuizCreator = ({ onSave, onCancel }) => {
     };
 
     const [questions, setQuestions] = useState([{ ...defaultQuestion }]);
-    const [activeQIndex, setActiveQIndex] = useState(0); // Chỉ số câu hỏi đang sửa
-    const [title, setTitle] = useState(''); // Tên bài kiểm tra
-
-    // --- CÁC HÀM XỬ LÝ LOGIC ---
+    const [activeQIndex, setActiveQIndex] = useState(0);
+    const [title, setTitle] = useState('');
 
     const updateQuestionField = (field, value) => {
         const newQs = [...questions];
@@ -29,17 +26,14 @@ const QuizCreator = ({ onSave, onCancel }) => {
 
     const updateOption = (optIndex, field, value) => {
         const newQs = [...questions];
-        // Nếu đang set isCorrect = true, có thể muốn reset các câu khác (nếu chỉ cho chọn 1)
-        // Ở đây ta cho phép nhiều đáp án đúng (multi-select) giống Kahoot
         newQs[activeQIndex].options[optIndex][field] = value;
         setQuestions(newQs);
     };
 
     const addQuestion = () => {
-        // Deep copy defaultQuestion để tránh tham chiếu
         const newQ = JSON.parse(JSON.stringify(defaultQuestion));
         setQuestions([...questions, newQ]);
-        setActiveQIndex(questions.length); // Chuyển sang câu mới tạo
+        setActiveQIndex(questions.length);
     };
 
     const removeQuestion = (index, e) => {
@@ -48,14 +42,12 @@ const QuizCreator = ({ onSave, onCancel }) => {
         
         const newQs = questions.filter((_, i) => i !== index);
         setQuestions(newQs);
-        // Điều chỉnh lại active index nếu cần
         if (activeQIndex >= newQs.length) setActiveQIndex(newQs.length - 1);
     };
 
     const handleSave = () => {
         if (!title.trim()) return alert("Vui lòng nhập tên bài kiểm tra!");
         
-        // Validate dữ liệu
         for (let i = 0; i < questions.length; i++) {
             const q = questions[i];
             if (!q.questionText.trim()) return alert(`Câu hỏi số ${i + 1} chưa có nội dung!`);
@@ -63,7 +55,6 @@ const QuizCreator = ({ onSave, onCancel }) => {
             if (!hasCorrect) return alert(`Câu hỏi số ${i + 1} chưa chọn đáp án đúng!`);
         }
 
-        // Gửi dữ liệu ra ngoài
         onSave({ title, questions });
     };
 
