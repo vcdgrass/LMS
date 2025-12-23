@@ -38,4 +38,11 @@ router.get('/:id/students', verifyToken, coursesController.getStudents);
 router.post('/:id/students', verifyToken, coursesController.addStudent);
 router.delete('/:id/students/:studentId', verifyToken, coursesController.removeStudent);
 
+// Route nộp bài Quiz
+router.post(
+    '/modules/:moduleId/quiz/submit', 
+    verifyToken,
+    coursesController.submitQuizController
+);
+
 module.exports = router;

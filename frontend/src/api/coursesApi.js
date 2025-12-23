@@ -60,7 +60,10 @@ const coursesApi = {
     updateGrade: (moduleId, data) => {
         // data: { studentId, score, feedback }
         return axiosClient.post(`/courses/modules/${moduleId}/grade`, data);
-    }
+    },
+    submitQuiz: (moduleId, answers) => {
+        return axiosClient.post(`/courses/modules/${moduleId}/quiz/submit`, { answers });
+    },
 };
 
 export default coursesApi;

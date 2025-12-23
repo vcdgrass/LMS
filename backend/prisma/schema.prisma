@@ -177,7 +177,7 @@ model QuizAttempt {
   userId      Int             @map("user_id")
   startedAt   DateTime?       @default(now()) @map("started_at") @db.Timestamptz(6)
   completedAt DateTime?       @map("completed_at") @db.Timestamptz(6)
-  score       Decimal?        @db.Decimal(5, 2)
+  score       Decimal?        @db.Decimal(10, 2)
   answers     AttemptAnswer[]
   quiz        ModuleQuiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
   user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -202,7 +202,7 @@ model Grade {
   courseId Int          @map("course_id")
   userId   Int          @map("user_id")
   moduleId Int          @map("module_id")
-  score    Decimal?     @db.Decimal(5, 2)
+  score    Decimal?     @db.Decimal(10, 2)
   feedback String?
   graderId Int?         @map("grader_id")
   gradedAt DateTime?    @map("graded_at") @db.Timestamptz(6)

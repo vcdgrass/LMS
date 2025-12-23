@@ -374,49 +374,59 @@ const removeStudentFromCourse = async (courseId, studentId) => {
 
 // Lấy danh sách bài nộp và điểm của một Module (Assignment)
 const getSubmissionsByModule = async (moduleId) => {
-    // 1. Lấy thông tin module để biết assignmentId (contentId)
-    const module = await prisma.courseModule.findUnique({
-        where: { id: parseInt(moduleId) }
+    // 1. Lấy thông tin Module
+    const moduleInfo = await prisma.courseModule.findUnique({
+        where: { id: parseInt(moduleId) },
+        include: { section: true }
     });
 
-    if (!module || module.moduleType !== 'assignment') {
-        throw new Error("Module không hợp lệ hoặc không phải bài tập.");
-    }
+    if (!moduleInfo) throw new Error("Module không tồn tại.");
 
-    // 2. Lấy danh sách học viên trong khóa học này
-    // Cần lấy courseId từ module -> section -> course để query enrollment (hoặc query ngược)
-    // Cách nhanh: Lấy tất cả user đã nộp bài HOẶC đã được chấm điểm
-    
-    // Ở đây ta lấy danh sách Submissions kèm theo thông tin User và Grade (nếu có)
-    const submissions = await prisma.assignmentSubmission.findMany({
+    // 2. Lấy tất cả học viên trong khóa học (để hiện cả người chưa nộp)
+    const enrollments = await prisma.enrollment.findMany({
         where: {
-            assignmentId: module.contentId
+            courseId: moduleInfo.section.courseId,
+            role: 'student'
         },
         include: {
-            user: {
-                select: { id: true, username: true, email: true }
-            }
+            user: { select: { id: true, username: true, email: true } }
         }
     });
 
-    // Lấy bảng điểm riêng cho module này (vì có thể có user chưa nộp nhưng đã bị chấm 0 điểm)
+    // 3. Lấy bảng điểm (Grade) của module này
     const grades = await prisma.grade.findMany({
         where: { moduleId: parseInt(moduleId) }
     });
 
-    // Merge data: Submission + Grade
-    // Trả về danh sách submission, map thêm điểm vào
-    const result = submissions.map(sub => {
-        const grade = grades.find(g => g.userId === sub.userId);
+    // 4. Lấy dữ liệu nộp bài (Nếu là Assignment)
+    let submissions = [];
+    if (moduleInfo.moduleType === 'assignment') {
+        submissions = await prisma.assignmentSubmission.findMany({
+            where: { assignmentId: moduleInfo.contentId }
+        });
+    } 
+    // Nếu là Quiz, ta có thể lấy QuizAttempt để biết thời gian làm, nhưng Grade là đủ để hiện điểm
+
+    // 5. Gộp dữ liệu (Map Students + Grade + Submission)
+    const result = enrollments.map(enrollment => {
+        const student = enrollment.user;
+        const gradeRecord = grades.find(g => g.userId === student.id);
+        const submissionRecord = submissions.find(s => s.userId === student.id);
+
         return {
-            ...sub,
-            score: grade ? grade.score : null,
-            feedback: grade ? grade.feedback : null
+            student: student, // Thông tin HS
+            score: gradeRecord ? gradeRecord.score : null, // Điểm
+            feedback: gradeRecord ? gradeRecord.feedback : null, // Nhận xét
+            submittedAt: submissionRecord ? submissionRecord.submittedAt : null, // Thời gian nộp (Assignment)
+            gradedAt: gradeRecord ? gradeRecord.gradedAt : null, // Thời gian chấm
+            filePath: submissionRecord ? submissionRecord.filePath : null, // File (nếu có)
+            isLate: submissionRecord ? submissionRecord.isLate : false
         };
     });
 
-    return result;
+    return result;   
 };
+
 
 // Chấm điểm (Tạo mới hoặc Cập nhật)
 const updateGrade = async (graderId, moduleId, studentId, score, feedback) => {
@@ -453,6 +463,111 @@ const updateGrade = async (graderId, moduleId, studentId, score, feedback) => {
     });
 };
 
+const submitQuiz = async (userId, moduleId, answers) => {
+    // 1. Lấy thông tin Module để biết contentId (ID của Quiz) và CourseId
+    const courseModule = await prisma.courseModule.findUnique({
+        where: { id: parseInt(moduleId) },
+        include: { section: true } // Để lấy courseId
+    });
+
+    if (!courseModule || courseModule.moduleType !== 'quiz') {
+        throw new Error("Module không tồn tại hoặc không phải là Quiz");
+    }
+
+    // 2. Lấy chi tiết bài Quiz và đáp án đúng
+    const quiz = await prisma.moduleQuiz.findUnique({
+        where: { id: courseModule.contentId },
+        include: { 
+            questions: { 
+                include: { options: true } 
+            } 
+        }
+    });
+
+    if (!quiz) throw new Error("Không tìm thấy dữ liệu câu hỏi");
+
+    // 3. Tính điểm (Logic phía Server để bảo mật)
+    let totalScore = 0;
+    let maxScore = 0;
+    const attemptAnswersData = [];
+
+    quiz.questions.forEach(q => {
+        const userOptionId = answers[q.id]; // ID đáp án user chọn gửi lên
+        const correctOption = q.options.find(opt => opt.isCorrect);
+        
+        // Cộng điểm tối đa (nếu cần tính %)
+        maxScore += (q.points || 0);
+
+        // Kiểm tra đúng/sai
+        if (userOptionId && correctOption && parseInt(userOptionId) === correctOption.id) {
+            totalScore += (q.points || 0);
+        }
+
+        // Tạo dữ liệu lưu chi tiết câu trả lời
+        if (userOptionId) {
+            attemptAnswersData.push({
+                questionId: q.id,
+                selectedOptionId: parseInt(userOptionId)
+            });
+        }
+    });
+
+    // 4. Sử dụng Transaction để đảm bảo toàn vẹn dữ liệu
+    return await prisma.$transaction(async (tx) => {
+        // 4.1. Lưu lượt làm bài vào QuizAttempt
+        const attempt = await tx.quizAttempt.create({
+            data: {
+                quizId: quiz.id,
+                userId: userId,
+                score: totalScore,
+                startedAt: new Date(), // Giả sử bắt đầu lúc nộp (hoặc bạn có thể truyền từ client)
+                completedAt: new Date(),
+                answers: {
+                    create: attemptAnswersData
+                }
+            }
+        });
+
+        // 4.2. Lưu/Cập nhật điểm vào bảng Grade (Để Teacher xem được)
+        // Logic: Luôn lấy điểm cao nhất hoặc điểm mới nhất tùy bạn (Ở đây mình để cập nhật điểm mới nhất)
+        
+        // Kiểm tra xem đã có điểm chưa
+        const existingGrade = await tx.grade.findUnique({
+            where: {
+                userId_moduleId: {
+                    userId: userId,
+                    moduleId: parseInt(moduleId)
+                }
+            }
+        });
+
+        // Nếu chưa có hoặc muốn ghi đè điểm
+        await tx.grade.upsert({
+            where: {
+                userId_moduleId: {
+                    userId: userId,
+                    moduleId: parseInt(moduleId)
+                }
+            },
+            update: {
+                score: totalScore,
+                gradedAt: new Date(),
+                graderId: null // Hệ thống tự chấm
+            },
+            create: {
+                userId: userId,
+                moduleId: parseInt(moduleId),
+                courseId: courseModule.section.courseId, // Quan trọng: Để biết điểm này thuộc khóa nào
+                score: totalScore,
+                gradedAt: new Date(),
+                graderId: null
+            }
+        });
+
+        return attempt;
+    });
+};
+
 module.exports = {
     createCourse,
     getTeachingCourses,
@@ -469,4 +584,5 @@ module.exports = {
     removeStudentFromCourse,
     getSubmissionsByModule,
     updateGrade,
+    submitQuiz,
 };

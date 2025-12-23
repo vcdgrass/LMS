@@ -241,6 +241,23 @@ const gradeStudent = async (req, res) => {
     }
 };
 
+const submitQuizController = async (req, res) => {
+    try {
+        const { moduleId } = req.params;
+        const { answers } = req.body; // Dạng { "1": 5, "2": 8 } (questionId: optionId)
+        const userId = req.user.userId;   // Lấy từ token xác thực
+        console.log(userId, moduleId, answers);
+        const result = await coursesService.submitQuiz(userId, moduleId, answers);
+        
+        res.status(200).json({
+            message: "Nộp bài thành công",
+            data: result
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: error.message || "Lỗi server khi nộp bài" });
+    }
+};
 
 module.exports = {
     getCoursesByTeacher,
@@ -258,4 +275,5 @@ module.exports = {
     removeStudent,
     getModuleSubmissions,
     gradeStudent,
+    submitQuizController,
 };

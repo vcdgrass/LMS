@@ -11,7 +11,7 @@ const QuizModule = ({ module }) => {
     const [score, setScore] = useState(0);
 
     const [showFeedback, setShowFeedback] = useState(false);
-    // const [isCorrectEntry, setIsCorrectEntry] = useState(false); // (Có thể bỏ nếu chưa dùng)
+    const [isCorrectEntry, setIsCorrectEntry] = useState(false);
     const [randomMsg, setRandomMsg] = useState("");
 
     // State lưu thời gian còn lại
@@ -37,24 +37,35 @@ const QuizModule = ({ module }) => {
     }, [module.contentId]);
 
     // 2. Hàm nộp bài
-    const handleSubmit = useCallback(() => {
-        let totalPoints = 0;
+    // Sửa hàm handleSubmit để chấp nhận tham số đầu vào (override)
+const handleSubmit = useCallback(async (finalAnswers = null) => {
+    // Ưu tiên dùng finalAnswers truyền vào, nếu không có mới dùng state selectedAnswers
+    const answersToSubmit = finalAnswers || selectedAnswers;
 
-        // Thêm optional chaining ?. để an toàn
-        if (quizData?.questions) {
-            quizData.questions.forEach(q => {
-                const userAnsId = selectedAnswers[q.id];
-                const correctOpt = q.options.find(o => o.isCorrect);
+    setLoading(true);
 
-                if (userAnsId === correctOpt?.id) {
-                    totalPoints += (q.points || 0);
-                }
-            });
-        }
+    try {
+        const res = await coursesApi.submitQuiz(module.id, answersToSubmit);
+        
+        // Xử lý kết quả trả về từ server
+        const serverResult = res.data.data; 
+        const serverScore = Number(serverResult.score);
 
-        setScore(totalPoints);
+        setScore(serverScore);
         setStatus('result');
-    }, [quizData, selectedAnswers]);
+
+        // Âm thanh chúc mừng
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3');
+        audio.volume = 0.5;
+        audio.play().catch(() => {});
+
+    } catch (error) {
+        console.error("Lỗi nộp bài:", error);
+        alert("Lỗi kết nối! Vui lòng thử nộp lại.");
+    } finally {
+        setLoading(false);
+    }
+}, [module.id, selectedAnswers]);
 
     // 3. Hàm chuyển câu (được bọc useCallback)
     const handleNext = useCallback(() => {
@@ -125,38 +136,34 @@ const QuizModule = ({ module }) => {
     const handleSelectOption = (questionId, optionId) => {
         if (showFeedback || !quizData?.questions) return;
 
+        // 1. Tạo object đáp án mới ngay lập tức (để dùng cho logic nộp bài)
+        const newAnswers = { ...selectedAnswers, [questionId]: optionId };
+        
+        // 2. Cập nhật state (để hiển thị UI)
+        setSelectedAnswers(newAnswers);
+
         const currentQ = quizData.questions[currentQIndex];
         const selectedOption = currentQ.options.find(opt => opt.id === optionId);
-        const isCorrect = selectedOption?.isCorrect; // Thêm ?. an toàn
+        const isCorrect = selectedOption?.isCorrect;
 
-        // Lưu đáp án
-        setSelectedAnswers(prev => ({ ...prev, [questionId]: optionId }));
-
-        // Phản hồi
-        // setIsCorrectEntry(isCorrect);
+        // 3. Phản hồi âm thanh & hình ảnh
+        setIsCorrectEntry(isCorrect); // Nhớ mở comment state này ở trên
         const msgList = isCorrect ? encouragement.correct : encouragement.wrong;
         setRandomMsg(msgList[Math.floor(Math.random() * msgList.length)]);
         setShowFeedback(true);
         playFeedbackSound(isCorrect);
 
-        // Chuyển câu sau 1.5s
+        // 4. Chuyển câu hoặc NỘP BÀI sau 1.5s
         setTimeout(() => {
             setShowFeedback(false);
+            
             if (currentQIndex < quizData.questions.length - 1) {
+                // Nếu chưa phải câu cuối -> Qua câu tiếp
                 setCurrentQIndex(prev => prev + 1);
             } else {
-                // Xử lý câu cuối: Tính điểm thủ công để đảm bảo chính xác
-                let tempScore = 0;
-                quizData.questions.forEach(q => {
-                    // Ưu tiên lấy đáp án vừa chọn (nếu là câu hiện tại), ngược lại lấy từ state
-                    const userAnsId = (q.id === questionId) ? optionId : selectedAnswers[q.id];
-                    const correctOpt = q.options.find(o => o.isCorrect);
-                    if (userAnsId === correctOpt?.id) {
-                        tempScore += (q.points || 0);
-                    }
-                });
-                setScore(tempScore);
-                setStatus('result');
+                // Nếu là câu cuối -> TỰ ĐỘNG NỘP BÀI
+                // Truyền newAnswers vào để đảm bảo có đáp án vừa chọn
+                handleSubmit(newAnswers);
             }
         }, 1500);
     };
@@ -271,7 +278,7 @@ const QuizModule = ({ module }) => {
             {showFeedback && (
                 <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black bg-opacity-40 animate-in fade-in duration-200">
                     <div className="bg-white px-8 py-6 rounded-2xl shadow-2xl transform scale-110 text-center">
-                        <div className="text-4xl mb-2">{randomMsg.includes('Tiếc') ? '😢' : '🎉'}</div>
+                        <div className="text-4xl mb-2">{isCorrectEntry ? '🎉' : '😢'}</div>
                         <h3 className="text-2xl font-black text-indigo-600">{randomMsg}</h3>
                     </div>
                 </div>

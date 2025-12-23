@@ -10,6 +10,7 @@ import QuizModule from '../../components/QuizModule';
 import AssignmentModule from '../../components/AssignmentModule';
 import ResourseModule from '../../components/ResourseModule';
 import StudentManagement from '../../components/StudentManagement';
+import TeacherGrade from '../../components/TeacherGrade';
 
 const CourseDetail = () => {
     const { id } = useParams();
@@ -399,7 +400,7 @@ const CourseDetail = () => {
                 )}
                 {activeTab === 'grade' && (
                     <div className="w-full p-8 overflow-y-auto text-center text-gray-500">
-                        Tính năng Bảng điểm đang phát triển...
+                        <TeacherGrade courseId={course.id} />
                     </div>
                 )}
 
