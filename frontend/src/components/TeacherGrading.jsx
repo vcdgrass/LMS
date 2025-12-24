@@ -73,6 +73,9 @@ const TeacherGrading = ({ module }) => {
 
 // Tách ra component con để quản lý state input của từng dòng
 const GradingRow = ({ submission, onSave }) => {
+    // Sửa: Lấy thông tin từ thuộc tính 'student' thay vì 'user'
+    const student = submission.student || {}; 
+
     const [score, setScore] = useState(submission.score !== null ? submission.score : '');
     const [feedback, setFeedback] = useState(submission.feedback || '');
     const [isChanged, setIsChanged] = useState(false);
@@ -82,29 +85,35 @@ const GradingRow = ({ submission, onSave }) => {
             alert("Điểm không hợp lệ (0-10)");
             return;
         }
-        onSave(submission.user.id, score, feedback);
+        // Sửa: Dùng student.id thay vì submission.user.id
+        onSave(student.id, score, feedback);
         setIsChanged(false);
     };
 
     return (
         <tr className="hover:bg-gray-50">
             <td className="p-3">
-                <div className="font-medium">{submission.user.username}</div>
-                <div className="text-xs text-gray-500">{submission.user.email}</div>
+                {/* Sửa: Dùng biến student đã khai báo ở trên hoặc optional chaining */}
+                <div className="font-medium">{student?.username || "Không tên"}</div>
+                <div className="text-xs text-gray-500">{student?.email}</div>
             </td>
             <td className="p-3">
-                {new Date(submission.submittedAt).toLocaleString('vi-VN')}
+                {submission.submittedAt ? new Date(submission.submittedAt).toLocaleString('vi-VN') : "Chưa nộp"}
                 {submission.isLate && <span className="ml-2 text-xs text-red-500 font-bold">(Muộn)</span>}
             </td>
             <td className="p-3">
-                <a 
-                    href={`http://localhost:5000/${submission.filePath}`} // URL backend
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="text-blue-600 hover:underline flex items-center gap-1"
-                >
-                Tải về
-                </a>
+                {submission.filePath ? (
+                    <a 
+                        href={`http://localhost:5000/${submission.filePath}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                    Tải về
+                    </a>
+                ) : (
+                    <span className="text-gray-400 text-xs">Không có file</span>
+                )}
             </td>
             <td className="p-3">
                 <input 

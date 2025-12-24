@@ -16,7 +16,7 @@ const TeacherGrade = ({ courseId }) => {
     useEffect(() => {
         const fetchCourseStructure = async () => {
             try {
-                const res = await coursesApi.getCourseDetail(courseId);
+                const res = await coursesApi.getById(courseId);
                 const course = res.data;
                 
                 // Flat map để lấy tất cả modules từ các sections
@@ -56,7 +56,7 @@ const TeacherGrade = ({ courseId }) => {
             setLoading(true);
             try {
                 // API này giờ đã trả về full danh sách học viên (Backend vừa sửa)
-                const res = await coursesApi.getModuleSubmissions(activeModuleId);
+                const res = await coursesApi.getSubmissions(activeModuleId);
                 setStudentData(res.data);
             } catch (error) {
                 console.error("Lỗi tải bảng điểm:", error);
