@@ -149,6 +149,20 @@ const createModule = async (sectionId, moduleData) => {
       }
     });
   }
+  else if (moduleData.type === 'flashcard') {
+    content = await prisma.moduleFlashcard.create({
+      data: {
+        description: moduleData.description || '',
+        flashcards: {
+          create: moduleData.cards?.map((card, index) => ({
+            frontText: card.frontText,
+            backText: card.backText,
+            orderIndex: index
+          }))
+        }
+      }
+    });
+  }
   const courseModule = await prisma.courseModule.create({
     data: {
       sectionId: parseInt(sectionId),
@@ -187,6 +201,16 @@ const getModuleById = async (id, type) => {
                     include: {
                         options: true // Lấy danh sách đáp án
                     }
+                }
+            }
+        });
+    }
+    else if (type === 'flashcard') {
+        moduleContent = await prisma.moduleFlashcard.findUnique({
+            where: { id: parseInt(id) },
+            include: {
+                flashcards: {
+                    orderBy: { orderIndex: 'asc' }
                 }
             }
         });
@@ -232,6 +256,11 @@ const deleteModule = async (moduleId, type) => {
                 });
             } else if (type === 'quiz') {
                 await prisma.moduleQuiz.delete({
+                    where: { id: parseInt(contentId) }
+                });
+            }
+            else if (type === 'flashcard') {
+                await prisma.moduleFlashcard.delete({
                     where: { id: parseInt(contentId) }
                 });
             }
@@ -568,6 +597,31 @@ const submitQuiz = async (userId, moduleId, answers) => {
     });
 };
 
+const getQuizLeaderboard = async (moduleId) => {
+    // Lấy danh sách điểm từ bảng Grade, sắp xếp điểm cao nhất lên đầu
+    const leaderboard = await prisma.grade.findMany({
+        where: {
+            moduleId: parseInt(moduleId)
+        },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    username: true,
+                    // avatar: true // Nếu có trường avatar thì bỏ comment
+                }
+            }
+        },
+        orderBy: [
+            { score: 'desc' },      // Điểm cao xếp trước
+            { gradedAt: 'asc' }     // Nếu bằng điểm, ai nộp trước xếp trước
+        ],
+        take: 20 // Chỉ lấy top 20
+    });
+
+    return leaderboard;
+};
+
 module.exports = {
     createCourse,
     getTeachingCourses,
@@ -585,4 +639,5 @@ module.exports = {
     getSubmissionsByModule,
     updateGrade,
     submitQuiz,
+    getQuizLeaderboard,
 };

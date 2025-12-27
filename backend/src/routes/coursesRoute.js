@@ -45,4 +45,6 @@ router.post(
     coursesController.submitQuizController
 );
 
+router.get('/:moduleId/leaderboard', verifyToken, coursesController.getLeaderboard);
+
 module.exports = router;

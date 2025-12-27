@@ -135,7 +135,9 @@ model Flashcard {
   flashcardId    Int    @map("flashcard_id")
   frontText      String @map("front_text")
   backText       String @map("back_text")
-  orderIndex    Int             @default(0) @map("order_index")
+  orderIndex     Int    @default(0) @map("order_index")
+  frontImage     String?         @map("front_image") // URL ảnh mặt trước
+  backImage      String?         @map("back_image")  // URL ảnh mặt sau
   flashcard      ModuleFlashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
 
   @@map("Flashcard")

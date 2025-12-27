@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Clock, CheckCircle, Play, ArrowRight } from 'lucide-react'; // Đã bỏ các icon không dùng để code gọn hơn
+import { Clock, CheckCircle, Play, ArrowRight, Trophy, Medal, User, Crown } from 'lucide-react'; // Đã bỏ các icon không dùng để code gọn hơn
 import coursesApi from '../api/coursesApi';
 
 const QuizModule = ({ module }) => {
@@ -9,6 +9,8 @@ const QuizModule = ({ module }) => {
     const [currentQIndex, setCurrentQIndex] = useState(0);
     const [selectedAnswers, setSelectedAnswers] = useState({});
     const [score, setScore] = useState(0);
+    const [leaderboard, setLeaderboard] = useState([]);
+    const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
     const [showFeedback, setShowFeedback] = useState(false);
     const [isCorrectEntry, setIsCorrectEntry] = useState(false);
@@ -36,36 +38,53 @@ const QuizModule = ({ module }) => {
         fetchQuiz();
     }, [module.contentId]);
 
+    useEffect(() => {
+        if (status === 'result') {
+            const fetchLeaderboard = async () => {
+                setLoadingLeaderboard(true);
+                try {
+                    const res = await coursesApi.getLeaderboard(module.id);
+                    setLeaderboard(res.data || []);
+                } catch (error) {
+                    console.error("Lỗi tải BXH:", error);
+                } finally {
+                    setLoadingLeaderboard(false);
+                }
+            };
+            fetchLeaderboard();
+        }
+    }, [status, module.id]);
+
     // 2. Hàm nộp bài
     // Sửa hàm handleSubmit để chấp nhận tham số đầu vào (override)
-const handleSubmit = useCallback(async (finalAnswers = null) => {
+    const handleSubmit = useCallback(async (finalAnswers = null) => {
     // Ưu tiên dùng finalAnswers truyền vào, nếu không có mới dùng state selectedAnswers
-    const answersToSubmit = finalAnswers || selectedAnswers;
+        const answersToSubmit = finalAnswers || selectedAnswers;
 
-    setLoading(true);
+        setLoading(true);
 
-    try {
-        const res = await coursesApi.submitQuiz(module.id, answersToSubmit);
-        
-        // Xử lý kết quả trả về từ server
-        const serverResult = res.data.data; 
-        const serverScore = Number(serverResult.score);
+        try {
+            const res = await coursesApi.submitQuiz(module.id, answersToSubmit);
+            
+            // Xử lý kết quả trả về từ server
+            const serverResult = res.data.data; 
+            const serverScore = Number(serverResult.score);
 
-        setScore(serverScore);
-        setStatus('result');
+            setScore(serverScore);
+            setStatus('result');
 
-        // Âm thanh chúc mừng
-        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3');
-        audio.volume = 0.5;
-        audio.play().catch(() => {});
+            // Âm thanh chúc mừng
+            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3');
+            audio.volume = 0.5;
+            audio.play().catch(() => {});
 
-    } catch (error) {
-        console.error("Lỗi nộp bài:", error);
-        alert("Lỗi kết nối! Vui lòng thử nộp lại.");
-    } finally {
-        setLoading(false);
-    }
-}, [module.id, selectedAnswers]);
+        } catch (error) {
+            console.error("Lỗi nộp bài:", error);
+            alert("Lỗi kết nối! Vui lòng thử nộp lại.");
+        } finally {
+            setLoading(false);
+        }
+    }, [module.id, selectedAnswers]);
 
     // 3. Hàm chuyển câu (được bọc useCallback)
     const handleNext = useCallback(() => {
@@ -212,33 +231,94 @@ const handleSubmit = useCallback(async (finalAnswers = null) => {
         const totalQ = questions.length;
         const correctCount = questions.filter(q => selectedAnswers[q.id] === q.options.find(o => o.isCorrect)?.id).length;
 
+        // Tìm thứ hạng của mình trong list vừa tải
+        // Giả sử backend trả về field 'user' có 'username' khớp với user hiện tại
+        // (Bạn có thể cần lấy user từ AuthContext để so sánh ID chính xác hơn)
+        
         return (
-            <div className="p-6 bg-white rounded-lg shadow-sm">
-                <div className="text-center mb-8 border-b pb-6">
-                    <h3 className="text-2xl font-bold text-gray-800">Kết quả</h3>
-                    <div className="text-5xl font-black text-indigo-600 my-4">{score} điểm</div>
-                    <p className="text-gray-600">Đúng {correctCount} / {totalQ} câu</p>
+            <div className="flex flex-col h-[600px] bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+                {/* Header Kết quả cá nhân */}
+                <div className="bg-indigo-600 p-6 text-center text-white relative overflow-hidden">
+                    <div className="relative z-10">
+                        <h3 className="text-xl font-bold opacity-90">Kết quả của bạn</h3>
+                        <div className="text-6xl font-black mt-2 mb-1">{score}</div>
+                        <p className="text-indigo-200 text-sm">Điểm số</p>
+                    </div>
+                    {/* Hiệu ứng nền trang trí */}
+                    <Crown size={120} className="absolute -top-4 -right-8 text-white opacity-10 rotate-12" />
+                    <Trophy size={100} className="absolute top-10 -left-6 text-white opacity-10 -rotate-12" />
+                </div>
+
+                {/* Bảng Xếp Hạng */}
+                <div className="flex-1 bg-gray-50 p-4 overflow-hidden flex flex-col">
+                    <h4 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
+                        <Trophy className="text-yellow-500" size={20}/> Bảng Xếp Hạng Lớp
+                    </h4>
+
+                    {loadingLeaderboard ? (
+                        <div className="text-center text-gray-400 py-10">Đang tải bảng xếp hạng...</div>
+                    ) : (
+                        <div className="flex-1 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
+                            {leaderboard.length === 0 ? (
+                                <p className="text-center text-gray-400">Chưa có ai khác làm bài này. Bạn là người đầu tiên!</p>
+                            ) : (
+                                leaderboard.map((entry, index) => {
+                                    // Logic hiển thị Icon huy chương
+                                    let RankIcon = <span className="font-bold text-gray-500 w-6 text-center">{index + 1}</span>;
+                                    let rowClass = "bg-white border-gray-200";
+                                    let scoreClass = "text-gray-600";
+
+                                    if (index === 0) {
+                                        RankIcon = <Crown size={24} className="text-yellow-500" fill="currentColor" />;
+                                        rowClass = "bg-yellow-50 border-yellow-200 shadow-sm transform scale-[1.02]";
+                                        scoreClass = "text-yellow-700 font-bold";
+                                    } else if (index === 1) {
+                                        RankIcon = <Medal size={24} className="text-gray-400" fill="currentColor" />;
+                                        rowClass = "bg-gray-50 border-gray-300";
+                                    } else if (index === 2) {
+                                        RankIcon = <Medal size={24} className="text-orange-400" fill="currentColor" />;
+                                        rowClass = "bg-orange-50 border-orange-200";
+                                    }
+
+                                    return (
+                                        <div 
+                                            key={index} 
+                                            className={`flex items-center justify-between p-3 rounded-lg border ${rowClass} transition-all`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 flex justify-center">{RankIcon}</div>
+                                                <div className="flex flex-col">
+                                                    <span className={`font-bold text-sm ${index === 0 ? 'text-gray-800' : 'text-gray-600'}`}>
+                                                        {entry.user?.username || "Ẩn danh"}
+                                                    </span>
+                                                    {index === 0 && <span className="text-[10px] text-yellow-600 font-bold uppercase">Top 1 Server</span>}
+                                                </div>
+                                            </div>
+                                            <div className={`text-lg ${scoreClass}`}>
+                                                {Number(entry.score)}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="p-4 bg-white border-t flex gap-3 justify-center">
                     <button
                         onClick={() => { setStatus('intro'); setSelectedAnswers({}); setScore(0); setCurrentQIndex(0); }}
-                        className="mt-4 text-indigo-600 font-bold hover:underline"
+                        className="px-6 py-2 border border-indigo-600 text-indigo-600 font-bold rounded hover:bg-indigo-50"
                     >
                         Làm lại
                     </button>
-                </div>
-                <div className="space-y-6">
-                    {questions.map((q, idx) => (
-                        <div key={q.id} className="border-b border-gray-100 pb-6 last:border-0">
-                            <h4 className="font-bold text-gray-800 mb-3"><span className="text-indigo-500">Câu {idx + 1}:</span> {q.questionText}</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {q.options.map(opt => (
-                                    <div key={opt.id} className={`p-3 rounded border text-sm font-medium flex justify-between ${getOptionClass(q, opt)}`}>
-                                        {opt.optionText}
-                                        {opt.isCorrect && <CheckCircle size={16} />}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
+                    <button
+                        onClick={() => alert("Chức năng quay về bài học đang phát triển")} // Hoặc logic quay lại trang course
+                        className="px-6 py-2 bg-gray-200 text-gray-700 font-bold rounded hover:bg-gray-300"
+                    >
+                        Thoát
+                    </button>
                 </div>
             </div>
         );

@@ -259,6 +259,17 @@ const submitQuizController = async (req, res) => {
     }
 };
 
+const getLeaderboard = async (req, res) => {
+    try {
+        const { moduleId } = req.params;
+        const data = await coursesService.getQuizLeaderboard(moduleId);
+        res.status(200).json(data);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Lỗi lấy bảng xếp hạng." });
+    }
+};
+
 module.exports = {
     getCoursesByTeacher,
     createCourse,
@@ -276,4 +287,5 @@ module.exports = {
     getModuleSubmissions,
     gradeStudent,
     submitQuizController,
+    getLeaderboard,
 };

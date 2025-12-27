@@ -64,6 +64,10 @@ const coursesApi = {
     submitQuiz: (moduleId, answers) => {
         return axiosClient.post(`/courses/modules/${moduleId}/quiz/submit`, { answers });
     },
+    getLeaderboard: (moduleId) => {
+        const url = `/courses/${moduleId}/leaderboard`;
+        return axiosClient.get(url);
+    },
 };
 
 export default coursesApi;

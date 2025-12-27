@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { ChevronDown, ChevronRight, FileText, Video, CheckSquare, Plus, Trash2, Edit } from 'lucide-react'; // Import icons
+import { ChevronDown, ChevronRight, FileText, Video, CheckSquare, Plus, Trash2, Edit, Zap } from 'lucide-react'; // Import icons
 import coursesApi from '../../api/coursesApi';
 import { useAuth } from '../../contexts/AuthContext';
 import QuizCreator from '../../components/QuizCreator';
 import QuizModule from '../../components/QuizModule';
+import FlashcardCreator from '../../components/FlashcardCreator';
+import FlashcardModule from '../../components/FlashcardModule';
 
 // Import các component hiển thị nội dung
 import AssignmentModule from '../../components/AssignmentModule';
@@ -37,6 +39,7 @@ const CourseDetail = () => {
     const [showModuleForm, setShowModuleForm] = useState(false);
     const [createModuleTab, setCreateModuleTab] = useState('');
     const [showQuizCreator, setShowQuizCreator] = useState(false);
+    const [showFlashcardCreator, setShowFlashcardCreator] = useState(false);
     
     const [newSectionTitle, setNewSectionTitle] = useState('');
     const [activeSectionId, setActiveSectionId] = useState(null);
@@ -150,12 +153,39 @@ const CourseDetail = () => {
         if (type === 'quiz') {
             setShowActivitySelector(false);
             setShowQuizCreator(true); // Bật chế độ tạo Quiz Kahoot
-        } else {
-            // Logic cũ cho resource/assignment
+        }
+        else if (type === 'flashcard') {  // [MỚI]
+            setShowActivitySelector(false);
+            setShowFlashcardCreator(true);
+        }
+        else {
             setModuleData({ type, title: '', url: '', description: '', dueDate: '' });
             setCreateModuleTab(type);
             setShowActivitySelector(false);
             setShowModuleForm(true);
+        }
+    };
+
+    const handleSaveFlashcard = async (cardData) => {
+        setSubmitting(true);
+        try {
+            const payload = {
+                title: cardData.title,
+                type: 'flashcard',
+                description: cardData.description,
+                cards: cardData.cards // Gửi mảng cards xuống backend
+            };
+            
+            await coursesApi.createModule(activeSectionId, payload);
+            
+            alert("Tạo bộ Flashcard thành công!");
+            setShowFlashcardCreator(false);
+            fetchCourseDetail();
+        } catch (error) {
+            console.error("Lỗi tạo flashcard:", error);
+            alert("Lỗi khi tạo flashcard.");
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -207,9 +237,9 @@ const CourseDetail = () => {
     const getModuleIcon = (type) => {
         switch(type) {
             case 'resource_file': return <FileText size={18} className="text-blue-500" />;
-            case 'resource_url': return <Video size={18} className="text-red-500" />; // Ví dụ url video
+            case 'resource_url': return <Video size={18} className="text-red-500" />;
             case 'assignment': return <Edit size={18} className="text-orange-500" />;
-            case 'quiz': return <CheckSquare size={18} className="text-green-500" />;
+            case 'flashcard': return <Zap size={18} className="text-yellow-500" />;
             default: return <FileText size={18} className="text-gray-500" />;
         }
     };
@@ -380,6 +410,9 @@ const CourseDetail = () => {
                                         {activeModule.moduleType === 'quiz' && (
                                             <QuizModule module={activeModule} />
                                         )}
+                                        {activeModule.moduleType === 'flashcard' && (
+                                            <FlashcardModule module={activeModule} />
+                                        )}
                                     </div>
                                 </div>
                             ) : (
@@ -445,6 +478,9 @@ const CourseDetail = () => {
                             <button onClick={() => handleSelectType('quiz')} className="p-4 border rounded hover:bg-green-50 flex flex-col items-center gap-2">
                                 <CheckSquare size={32} className="text-green-500"/> <span>Trắc nghiệm</span>
                             </button>
+                            <button onClick={() => handleSelectType('flashcard')} className="p-4 border rounded hover:bg-yellow-50 flex flex-col items-center gap-2">
+                                <Zap size={32} className="text-yellow-500"/> <span>Flashcards (Thẻ nhớ)</span>
+                            </button>
                         </div>
                         <button onClick={() => setShowActivitySelector(false)} className="mt-6 w-full py-2 bg-gray-100 rounded text-gray-600">Đóng</button>
                     </div>
@@ -505,6 +541,12 @@ const CourseDetail = () => {
                 <QuizCreator 
                     onSave={handleSaveQuiz} 
                     onCancel={() => setShowQuizCreator(false)} 
+                />
+            )}
+            {showFlashcardCreator && (
+                <FlashcardCreator
+                    onSave={handleSaveFlashcard}
+                    onCancel={() => setShowFlashcardCreator(false)}
                 />
             )}
         </div>
