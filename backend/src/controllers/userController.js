@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const csv = require('csv-parser');
-const { getAllUserService, updateUserLockStatus } = require('../services/userService');
+const { getAllUserService, updateUserLockStatus, getAllStudents} = require('../services/userService');
 
 const getAllUsers = async (req, res) => {
     try {
@@ -123,9 +123,19 @@ const toggleLockUser = async (req, res) => {
     }
 };
 
+const getAllStudentsController = async (req, res) => {
+    try {
+        const students = await getAllStudents();
+        res.status(200).json(students);
+    } catch (error) {
+        res.status(500).json({ message: "Lỗi khi lấy danh sách học viên", error: error.message });
+    }
+};
+
 module.exports = {
     getAllUsers,
     createUser,
     importUsers,
     toggleLockUser,
+    getAllStudentsController,
 };

@@ -35,7 +35,7 @@ model CourseCategory {
 
   @@map("CourseCategory")
 }
-
+ 
 model Course {
   id            Int             @id @default(autoincrement()) @map("id_course")
   categoryId    Int             @map("category_id")
@@ -119,6 +119,26 @@ model ModuleQuiz {
   questions        QuizQuestion[]
 
   @@map("Module_Quiz")
+}
+
+// Thêm model mới
+model ModuleFlashcard {
+  id          Int    @id @default(autoincrement()) @map("id_flashcard")
+  description String?
+  flashcards  Flashcard[]
+
+  @@map("Module_Flashcard")
+}
+
+model Flashcard {
+  id             Int    @id @default(autoincrement()) @map("id_card")
+  flashcardId    Int    @map("flashcard_id")
+  frontText      String @map("front_text")
+  backText       String @map("back_text")
+  orderIndex    Int             @default(0) @map("order_index")
+  flashcard      ModuleFlashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+
+  @@map("Flashcard")
 }
 
 model ModuleResource {
@@ -252,6 +272,7 @@ enum ModuleType {
   resource_file
   resource_url
   page
+  flashcard
 
   @@map("module_type")
 }

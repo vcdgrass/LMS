@@ -23,7 +23,7 @@ const App = () => {
             <Router>
                 <Routes>
                     {/* Nhóm tất cả route dưới prefix /ChuyenHT */}
-                    <Route path="/ChuyenHT">
+                    <Route path="/">
                         {/* Trang khởi đầu */}
                         <Route index element={<LandingPage />} />
 

@@ -1,9 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Search, FileText, CheckSquare, Filter, 
     ChevronRight, Download, Clock 
 } from 'lucide-react';
 import coursesApi from '../api/coursesApi';
+
+// --- THUẬT TOÁN LEVENSHTEIN DISTANCE (Quy hoạch động) ---
+// Tính khoảng cách chỉnh sửa giữa 2 chuỗi để so sánh độ tương đồng
+const levenshteinDistance = (s1, s2) => {
+    const m = s1.length;
+    const n = s2.length;
+    const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+            dp[i][j] = Math.min(
+                dp[i - 1][j] + 1,       // Xóa
+                dp[i][j - 1] + 1,       // Chèn
+                dp[i - 1][j - 1] + cost // Thay thế
+            );
+        }
+    }
+    return dp[m][n];
+};
 
 const TeacherGrade = ({ courseId }) => {
     const [modules, setModules] = useState([]);
@@ -12,20 +35,18 @@ const TeacherGrade = ({ courseId }) => {
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // 1. Lấy cấu trúc khóa học để lọc ra các bài Quiz/Assignment
+    // 1. Lấy cấu trúc khóa học
     useEffect(() => {
         const fetchCourseStructure = async () => {
             try {
                 const res = await coursesApi.getById(courseId);
                 const course = res.data;
                 
-                // Flat map để lấy tất cả modules từ các sections
                 const gradableModules = [];
                 if (course.sections) {
                     course.sections.forEach(section => {
                         if (section.modules) {
                             section.modules.forEach(mod => {
-                                // Chỉ lấy Quiz và Assignment
                                 if (['quiz', 'assignment'].includes(mod.moduleType)) {
                                     gradableModules.push({
                                         id: mod.id,
@@ -39,7 +60,6 @@ const TeacherGrade = ({ courseId }) => {
                     });
                 }
                 setModules(gradableModules);
-                // Mặc định chọn bài đầu tiên
                 if (gradableModules.length > 0) setActiveModuleId(gradableModules[0].id);
             } catch (error) {
                 console.error("Lỗi tải khóa học:", error);
@@ -55,7 +75,6 @@ const TeacherGrade = ({ courseId }) => {
         const fetchGrades = async () => {
             setLoading(true);
             try {
-                // API này giờ đã trả về full danh sách học viên (Backend vừa sửa)
                 const res = await coursesApi.getSubmissions(activeModuleId);
                 setStudentData(res.data);
             } catch (error) {
@@ -70,15 +89,34 @@ const TeacherGrade = ({ courseId }) => {
 
     const activeModule = modules.find(m => m.id === activeModuleId);
 
-    // Filter tìm kiếm module bên trái
-    const filteredModules = modules.filter(m => 
-        m.title.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // --- ÁP DỤNG THUẬT TOÁN TÌM KIẾM ---
+    const filteredModules = useMemo(() => {
+        if (!searchTerm.trim()) return modules;
+        
+        const term = searchTerm.toLowerCase();
+        
+        return modules.filter(m => {
+            const title = m.title.toLowerCase();
+            
+            // 1. Ưu tiên tìm chính xác (substring)
+            if (title.includes(term)) return true;
+
+            // 2. Tìm kiếm mờ (Fuzzy Search) nếu từ khóa > 2 ký tự
+            // Cho phép sai số tối đa 2 ký tự (ví dụ: gõ 'quizz' vẫn ra 'quiz')
+            if (term.length > 2) {
+                const dist = levenshteinDistance(title, term);
+                // Ngưỡng sai số: 2 ký tự hoặc 30% độ dài từ khóa
+                return dist <= 2; 
+            }
+            
+            return false;
+        });
+    }, [modules, searchTerm]);
 
     return (
         <div className="flex h-[calc(100vh-140px)] bg-white border rounded-xl overflow-hidden shadow-sm font-sans mt-6">
             
-            {/* --- CỘT TRÁI: DANH SÁCH BÀI TẬP (35%) --- */}
+            {/* --- CỘT TRÁI: DANH SÁCH BÀI TẬP --- */}
             <div className="w-[35%] border-r border-gray-200 bg-white flex flex-col">
                 <div className="p-4 border-b border-gray-100 bg-gray-50">
                     <h2 className="font-bold text-lg text-gray-800 mb-3">Sổ điểm</h2>
@@ -86,7 +124,7 @@ const TeacherGrade = ({ courseId }) => {
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                         <input 
                             type="text" 
-                            placeholder="Tìm bài tập, quiz..." 
+                            placeholder="Tìm bài tập (VD: Quiz 1)..." 
                             className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -126,16 +164,17 @@ const TeacherGrade = ({ courseId }) => {
                         </div>
                     ))}
                     {filteredModules.length === 0 && (
-                        <div className="p-4 text-center text-gray-400 text-sm">Không tìm thấy bài tập nào.</div>
+                        <div className="p-4 text-center text-gray-400 text-sm">
+                            Không tìm thấy kết quả phù hợp.
+                        </div>
                     )}
                 </div>
             </div>
 
-            {/* --- CỘT PHẢI: CHI TIẾT ĐIỂM SỐ (65%) --- */}
+            {/* --- CỘT PHẢI: CHI TIẾT ĐIỂM SỐ --- */}
             <div className="w-[65%] bg-gray-50 flex flex-col">
                 {activeModule ? (
                     <>
-                        {/* Header */}
                         <div className="px-6 py-4 bg-white border-b border-gray-200 flex justify-between items-center shadow-sm z-10">
                             <div>
                                 <div className="flex items-center gap-2 mb-1">
@@ -158,7 +197,6 @@ const TeacherGrade = ({ courseId }) => {
                             </div>
                         </div>
 
-                        {/* Table Content */}
                         <div className="flex-1 overflow-y-auto p-6">
                             {loading ? (
                                 <div className="flex justify-center items-center h-full text-gray-500">Đang tải dữ liệu...</div>
@@ -176,7 +214,6 @@ const TeacherGrade = ({ courseId }) => {
                                         <tbody className="divide-y divide-gray-100">
                                             {studentData.map((item, idx) => (
                                                 <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                                                    {/* Cột 1: Học viên */}
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center">
                                                             <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs mr-3">
@@ -188,24 +225,14 @@ const TeacherGrade = ({ courseId }) => {
                                                             </div>
                                                         </div>
                                                     </td>
-
-                                                    {/* Cột 2: Trạng thái */}
                                                     <td className="px-6 py-4">
                                                         {item.score !== null ? (
-                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                                Đã chấm
-                                                            </span>
+                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Đã chấm</span>
                                                         ) : item.submittedAt ? (
-                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                                                Chờ chấm
-                                                            </span>
+                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Chờ chấm</span>
                                                         ) : (
-                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                                                Chưa nộp
-                                                            </span>
+                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Chưa nộp</span>
                                                         )}
-                                                        
-                                                        {/* Hiển thị thời gian nộp/làm bài */}
                                                         {(item.submittedAt || item.gradedAt) && (
                                                             <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
                                                                 <Clock size={10} />
@@ -213,48 +240,21 @@ const TeacherGrade = ({ courseId }) => {
                                                             </div>
                                                         )}
                                                     </td>
-
-                                                    {/* Cột 3: Điểm số */}
                                                     <td className="px-6 py-4 text-center">
                                                         {item.score !== null ? (
-                                                            <span className={`text-lg font-bold ${Number(item.score) >= 5 ? 'text-gray-800' : 'text-red-500'}`}>
-                                                                {item.score}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-gray-300 text-2xl font-light">-</span>
-                                                        )}
+                                                            <span className={`text-lg font-bold ${Number(item.score) >= 5 ? 'text-gray-800' : 'text-red-500'}`}>{item.score}</span>
+                                                        ) : <span className="text-gray-300 text-2xl font-light">-</span>}
                                                     </td>
-
-                                                    {/* Cột 4: Chi tiết / File */}
                                                     <td className="px-6 py-4">
                                                         {activeModule.type === 'assignment' && item.filePath && (
-                                                            <a 
-                                                                href={`http://localhost:5000/${item.filePath}`} 
-                                                                target="_blank" 
-                                                                rel="noreferrer"
-                                                                className="text-blue-600 hover:underline text-xs font-medium"
-                                                            >
-                                                                Xem bài làm
-                                                            </a>
+                                                            <a href={`http://localhost:5000/${item.filePath}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs font-medium">Xem bài làm</a>
                                                         )}
-                                                        {activeModule.type === 'quiz' && item.score !== null && (
-                                                            <span className="text-xs text-gray-500">Auto-graded</span>
-                                                        )}
-                                                        {item.feedback && (
-                                                            <p className="text-xs text-gray-500 mt-1 italic max-w-xs truncate">
-                                                                " {item.feedback} "
-                                                            </p>
-                                                        )}
+                                                        {item.feedback && <p className="text-xs text-gray-500 mt-1 italic max-w-xs truncate">" {item.feedback} "</p>}
                                                     </td>
                                                 </tr>
                                             ))}
-                                            
                                             {studentData.length === 0 && (
-                                                <tr>
-                                                    <td colSpan="4" className="p-8 text-center text-gray-500">
-                                                        Lớp học chưa có học viên nào.
-                                                    </td>
-                                                </tr>
+                                                <tr><td colSpan="4" className="p-8 text-center text-gray-500">Lớp học chưa có học viên nào.</td></tr>
                                             )}
                                         </tbody>
                                     </table>
