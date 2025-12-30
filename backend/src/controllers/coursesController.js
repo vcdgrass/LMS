@@ -1,13 +1,12 @@
-const { get } = require('../routes/coursesRoute');
 const coursesService = require('../services/coursesServices');
-const { prisma } = require('../utils/db');
 
 const getCoursesByTeacher = async (req, res) => {
     try {
-        // SỬA DÒNG NÀY: req.user.id -> req.user.userId
-        const teacherId = req.user.userId; 
-        
-        const courses = await coursesService.getTeachingCourses(teacherId);
+        const teacherId = req.user.userId;
+        const schoolId = req.schoolId; // [MỚI] Lấy schoolId từ middleware
+
+        // Truyền schoolId vào service để lọc khóa học của trường này
+        const courses = await coursesService.getTeachingCourses(teacherId, schoolId);
         res.status(200).json(courses);
     } catch (error) {
         console.error("Lỗi khi lấy khóa học của giảng viên:", error);
@@ -17,35 +16,32 @@ const getCoursesByTeacher = async (req, res) => {
 
 const createCourse = async (req, res) => {
     try {
-        // SỬA DÒNG NÀY: req.user.id -> req.user.userId
         const teacherId = req.user.userId; 
+        const schoolId = req.schoolId; // [MỚI] Lấy schoolId
         
-        console.log("Creating course for teacherId:", teacherId); // Log kiểm tra
+        console.log("Creating course for teacherId:", teacherId, "at School:", schoolId);
         
-        const courseData = {
-            ...req.body,
-            teacherId 
-        };
-        const newCourse = await coursesService.createCourse(courseData);
+        // Truyền req.body (dữ liệu form), teacherId và schoolId sang Service
+        const newCourse = await coursesService.createCourse(req.body, teacherId, schoolId);
+        
         res.status(201).json(newCourse);
     } catch (error) {
         console.error("Lỗi khi tạo khóa học:", error);
-        res.status(500).json({ message: "Lỗi máy chủ khi tạo khóa học." });
+        res.status(500).json({ message: error.message || "Lỗi máy chủ khi tạo khóa học." });
     }
 };
 
 const getCourseDetail = async (req, res) => {
     try {
         const { id } = req.params;
-        const course = await coursesService.getCourseById(id);
+        const schoolId = req.schoolId; // [MỚI]
+
+        // Truyền thêm schoolId để đảm bảo không xem trộm khóa học trường khác
+        const course = await coursesService.getCourseById(id, schoolId);
 
         if (!course) {
-            return res.status(404).json({ message: "Không tìm thấy khóa học." });
+            return res.status(404).json({ message: "Không tìm thấy khóa học hoặc không thuộc trường này." });
         }
-
-        // (Tùy chọn) Kiểm tra quyền truy cập: 
-        // Chỉ cho phép nếu user là Giáo viên của lớp HOẶC Sinh viên đã ghi danh
-        // Logic này có thể mở rộng sau.
 
         res.status(200).json(course);
     } catch (error) {
@@ -58,6 +54,7 @@ const addSection = async (req, res) => {
     try {
         const { id } = req.params; // courseId
         const { title } = req.body;
+        // Có thể thêm check schoolId ở đây nếu cần bảo mật kỹ hơn
         const section = await coursesService.createSection(id, title);
         res.status(201).json(section);
     } catch (error) {
@@ -69,7 +66,6 @@ const addSection = async (req, res) => {
 const addModule = async (req, res) => {
     try {
         const { sectionId } = req.params;
-        // body: { title, type, ... }
         const module = await coursesService.createModule(sectionId, req.body);
         res.status(201).json(module);
     } catch (error) {
@@ -84,7 +80,6 @@ const getModuleById = async (req, res) => {
         const type = req.query.type;
         const module = await coursesService.getModuleById(moduleId, type);
         if (!module) {
-            console.error("Module not found for ID:", moduleId, "and type:", type);
             return res.status(404).json({ message: "Không tìm thấy bài học." });
         }
         res.status(200).json(module);
@@ -121,55 +116,32 @@ const deleteModule = async (req, res) => {
 const submitAssignment = async (req, res) => {
     try {
         const assignmentId = Number(req.params.assignmentId);
-        const userId = Number(req.user.userId); // hoặc req.user.id tùy middleware
+        const userId = Number(req.user.userId);
         const file = req.file;
 
         if (isNaN(assignmentId) || isNaN(userId)) {
             return res.status(400).json({ message: "assignmentId hoặc userId không hợp lệ" });
         }
 
-        console.log("assignmentId: ", assignmentId);
-
-        // 1. Kiểm tra assignment có tồn tại không
-        const assignment = await prisma.moduleAssignment.findUnique({
-            where: { id: assignmentId }
-        });
-
-        if (!assignment) {
-            return res.status(404).json({ message: "Bài tập không tồn tại." });
-        }
-
-        // 2. Tính toán nộp muộn
-        const isLate = assignment.dueDate && new Date() > new Date(assignment.dueDate);
-
-        // 3. Tạo record Submission
-        const submission = await prisma.assignmentSubmission.create({
-            data: {
-                assignmentId,
-                userId,
-                filePath: file.path,
-                submittedAt: new Date(),
-                isLate
-            }
-        });
-
-        return res.json(submission); // gửi response về client
+        const result = await coursesService.submitAssignment(userId, assignmentId, file);
+        return res.json(result);
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ message: "Lỗi server khi nộp bài." });
+        return res.status(500).json({ message: error.message || "Lỗi server khi nộp bài." });
     }
 };
 
 
 const getStudentCourses = async (req, res) => {
     try {
-        // req.user.userId lấy từ middleware verifyToken
         const studentId = req.user.userId;
-        console.log("studentID: ", studentId);
+        const schoolId = req.schoolId; // [MỚI]
+
         if (!studentId) {
              return res.status(400).json({ message: "Không xác định được người dùng." });
         }       
-        const courses = await coursesService.getEnrolledCourses(studentId);
+        // Truyền schoolId để chỉ lấy khóa học trường này
+        const courses = await coursesService.getEnrolledCourses(studentId, schoolId);
         res.status(200).json(courses);
     } catch (error) {
         console.error("Lỗi lấy khóa học sinh viên:", error);
@@ -177,7 +149,6 @@ const getStudentCourses = async (req, res) => {
     }
 };
 
-// [MỚI] Lấy danh sách học sinh
 const getStudents = async (req, res) => {
     try {
         const { id } = req.params; // courseId
@@ -189,15 +160,16 @@ const getStudents = async (req, res) => {
     }
 };
 
-// [MỚI] Thêm học sinh
 const addStudent = async (req, res) => {
     try {
         const { id } = req.params; // courseId
         const { email } = req.body;
+        // Có thể thêm schoolId vào đây để đảm bảo student thuộc trường này
+        const schoolId = req.schoolId; 
 
         if (!email) return res.status(400).json({ message: "Vui lòng nhập email." });
 
-        await coursesService.addStudentToCourse(id, email);
+        await coursesService.addStudentToCourse(id, email, schoolId);
         res.status(201).json({ message: "Thêm học viên thành công!" });
     } catch (error) {
         console.error(error);
@@ -205,7 +177,6 @@ const addStudent = async (req, res) => {
     }
 };
 
-// [MỚI] Xóa học sinh
 const removeStudent = async (req, res) => {
     try {
         const { id, studentId } = req.params;
@@ -231,7 +202,7 @@ const gradeStudent = async (req, res) => {
     try {
         const { moduleId } = req.params;
         const { studentId, score, feedback } = req.body;
-        const graderId = req.user.userId; // Người chấm
+        const graderId = req.user.userId; 
 
         const grade = await coursesService.updateGrade(graderId, moduleId, studentId, score, feedback);
         res.status(200).json({ message: "Chấm điểm thành công", grade });
@@ -244,9 +215,9 @@ const gradeStudent = async (req, res) => {
 const submitQuizController = async (req, res) => {
     try {
         const { moduleId } = req.params;
-        const { answers } = req.body; // Dạng { "1": 5, "2": 8 } (questionId: optionId)
-        const userId = req.user.userId;   // Lấy từ token xác thực
-        console.log(userId, moduleId, answers);
+        const { answers } = req.body; 
+        const userId = req.user.userId;   
+        
         const result = await coursesService.submitQuiz(userId, moduleId, answers);
         
         res.status(200).json({

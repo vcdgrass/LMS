@@ -77,7 +77,6 @@ const StudentManagement = ({ courseId, canEdit }) => {
             try {
                 // GỌI API THỰC TẾ
                 const res = await userApi.getAllStudents(); 
-                                console.log("here");
                 const globalStudents = res.data; // Giả sử API trả về mảng [{email: '...'}, ...]
 
                 // Reset Trie cũ (nếu cần) hoặc chỉ insert mới

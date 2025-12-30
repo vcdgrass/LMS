@@ -1,31 +1,35 @@
 import React from 'react';
-import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
+import { Link, useNavigate, Outlet, useLocation, useParams } from 'react-router-dom'; // Thêm useParams
 
 const AdminLayout = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const { schoolSlug } = useParams(); // [MỚI]
 
-    // Hàm xử lý đăng xuất
     const handleLogout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        navigate('/login');
+        // [MỚI] Về trang login của trường hiện tại
+        navigate(`/${schoolSlug}/login`);
     };
 
-    // Danh sách menu
+    // [MỚI] Prefix cho tất cả các đường dẫn
+    const prefix = `/${schoolSlug}`;
+
     const menuItems = [
-        { path: '/admin/dashboard', label: 'Tổng quan', icon: '📊' },
-        { path: '/admin/users', label: 'Quản lý Người dùng', icon: '👥' }, // [cite: 2]
-        { path: '/admin/categories', label: 'Danh mục Khóa học', icon: '📂' }, // [cite: 11]
-        { path: '/admin/settings', label: 'Cài đặt hệ thống', icon: '⚙️' },
+        { path: `${prefix}/admin/dashboard`, label: 'Tổng quan', icon: '📊' },
+        { path: `${prefix}/admin/users`, label: 'Quản lý Người dùng', icon: '👥' },
+        { path: `${prefix}/admin/categories`, label: 'Danh mục Khóa học', icon: '📂' },
+        // { path: `${prefix}/admin/settings`, label: 'Cài đặt hệ thống', icon: '⚙️' },
     ];
 
     return (
         <div className="flex h-screen bg-gray-100">
-            {/* --- SIDEBAR --- */}
             <aside className="w-64 bg-gray-800 text-white flex flex-col">
                 <div className="p-6 text-center font-bold text-2xl border-b border-gray-700">
                     Admin Portal
+                    {/* Hiển thị tên slug cho dễ nhận biết */}
+                    <div className="text-xs font-normal text-gray-400 mt-1">Trường: {schoolSlug}</div>
                 </div>
                 
                 <nav className="flex-1 p-4 space-y-2">
@@ -56,12 +60,10 @@ const AdminLayout = () => {
                 </div>
             </aside>
 
-            {/* --- MAIN CONTENT AREA --- */}
             <main className="flex-1 flex flex-col overflow-hidden">
-                {/* Header nhỏ phía trên */}
                 <header className="bg-white shadow p-4 flex justify-between items-center">
                     <h2 className="text-xl font-semibold text-gray-800">
-                        Hệ thống Quản lý Học tập (LMS)
+                        Hệ thống Quản lý Học tập
                     </h2>
                     <div className="flex items-center space-x-2">
                         <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
@@ -71,7 +73,6 @@ const AdminLayout = () => {
                     </div>
                 </header>
 
-                {/* Nội dung thay đổi của từng trang sẽ hiện ở đây */}
                 <div className="flex-1 overflow-auto p-6">
                     <Outlet /> 
                 </div>

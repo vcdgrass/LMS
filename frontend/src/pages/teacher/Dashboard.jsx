@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import api from '../../api/axiosClient';
 
 const TeacherDashboard = () => {
     const [courses, setCourses] = useState([]);
+    const { schoolSlug } = useParams();
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -81,7 +82,7 @@ const TeacherDashboard = () => {
                                 <div className="border-t pt-4 flex justify-between items-center mt-auto">
                                     {/* Nút Vào lớp để sửa nội dung/chấm điểm */}
                                     <Link 
-                                        to={`/course/${course.id}`} 
+                                        to={`/${schoolSlug}/course/${course.id}`}
                                         className="text-blue-600 font-semibold hover:text-blue-800 text-sm"
                                     >
                                         Truy cập lớp học &rarr;

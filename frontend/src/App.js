@@ -1,7 +1,12 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+
+// Import Layout mới
+import SchoolLayout from './layouts/SchoolLayout'; 
+
+// Các Import cũ giữ nguyên
+import LandingPagePlatform from './pages/LandingPagePlatform';
 import LoginPage from './pages/auth/LoginPage';
-import RegisterPage from './pages/auth/RegisterPage';
 import LandingPage from './pages/LandingPage';
 import AdminLayout from './layouts/AdminLayout';
 import AdminDashboard from './pages/admin/Dashboard';
@@ -13,25 +18,34 @@ import CreateCourse from './pages/teacher/CreateCourse';
 import CourseDetail from './pages/course/CourseDetail';
 import StudentDashboard from './pages/student/Dashboard';
 import StudentLayout from './layouts/StudentLayout';
-
-// Component bảo vệ Route
-import PrivateRoute from './components/PrivateRoute'; 
+import PrivateRoute from './components/PrivateRoute';
+import TenantRegister from './pages/TenantRegister';
 
 const App = () => {
     return (
         <AuthProvider>
             <Router>
                 <Routes>
-                    {/* Nhóm tất cả route dưới prefix /ChuyenHT */}
-                    <Route path="/">
-                        {/* Trang khởi đầu */}
+                    {/* 1. TRANG CHỦ CỦA PLATFORM (ví dụ: mylms.com) */}
+                    {/* Bạn có thể tạo một trang giới thiệu chung ở đây, hoặc redirect tạm */}
+                    <Route path="/" element={<LandingPagePlatform />} />
+
+                    {/* TRANG ĐĂNG KÝ TRƯỜNG MỚI (Thêm vào đây) */}
+                    <Route path="/create-school" element={<TenantRegister />} />
+
+                    {/* 2. CÁC TRANG CỦA TỪNG TRƯỜNG (Bắt đầu bằng /:schoolSlug) */}
+                    <Route path="/:schoolSlug" element={<SchoolLayout />}>
+                        
+                        {/* Trang Landing riêng của trường */}
                         <Route index element={<LandingPage />} />
 
-                        {/* Public Routes */}
+                        {/* Auth Routes */}
                         <Route path="login" element={<LoginPage />} />
-                        <Route path="register" element={<RegisterPage />} />
 
-                        {/* ADMIN ROUTES */}
+                        {/* --- CÁC ROUTE BẢO VỆ (ADMIN/TEACHER/STUDENT) --- */}
+                        {/* Lưu ý: PrivateRoute cần sửa nhẹ để redirect đúng link có slug, nhưng tạm thời giữ nguyên vẫn chạy được nếu user không F5 */}
+                        
+                        {/* ADMIN */}
                         <Route element={<PrivateRoute allowedRoles={['admin']} />}>
                             <Route path="admin" element={<AdminLayout />}>
                                 <Route path="dashboard" element={<AdminDashboard />} />
@@ -40,7 +54,7 @@ const App = () => {
                             </Route>
                         </Route>
 
-                        {/* TEACHER ROUTES */}
+                        {/* TEACHER */}
                         <Route element={<PrivateRoute allowedRoles={['teacher']} />}>
                             <Route path="teacher" element={<TeacherLayout />}>
                                 <Route path="dashboard" element={<TeacherDashboard />} />
@@ -49,15 +63,17 @@ const App = () => {
                             <Route path="course/:id" element={<CourseDetail />} />
                         </Route>
 
-                        {/* STUDENT ROUTES */}
+                        {/* STUDENT */}
                         <Route element={<PrivateRoute allowedRoles={['student']} />}>
                             <Route path="student" element={<StudentLayout />}>
                                 <Route path="dashboard" element={<StudentDashboard />} />
-                                <Route index element={<Navigate to="/ChuyenHT/student/dashboard" replace />} />
+                                {/* Redirect thông minh: Luôn giữ lại slug */}
+                                {/* <Route index element={<Navigate to="dashboard" replace />} /> */}
                             </Route>
                             <Route path="course/:id" element={<CourseDetail />} /> 
                         </Route>
-                    </Route>
+
+                    </Route> {/* Kết thúc Route SchoolLayout */}
                 </Routes>
             </Router>
         </AuthProvider>

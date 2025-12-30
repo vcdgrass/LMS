@@ -1,16 +1,18 @@
-const e = require('express');
 const { prisma } = require('../utils/db');
 
-const createCourse = async (courseData) => {
-    // 1. Validate teacherId TRƯỚC khi gọi DB
-    const teacherIdRaw = courseData.teacherId;
-    const teacherId = teacherIdRaw ? parseInt(teacherIdRaw, 10) : NaN;
-
-    if (Number.isNaN(teacherId)) {
-        throw new Error('teacherId is required and must be a valid number.');
+// [MỚI] Nhận thêm teacherId và schoolId từ Controller
+const createCourse = async (courseData, teacherId, schoolId) => {
+    
+    // Validate teacherId
+    if (!teacherId || isNaN(parseInt(teacherId))) {
+        throw new Error('Cần có thông tin giáo viên (userId) để tạo khóa học.');
     }
 
-    // 2. Tạo Course và Link TeacherCourse trong CÙNG 1 lệnh (Transaction ngầm định)
+    if (!schoolId) {
+        throw new Error('Thiếu thông tin trường học (schoolId).');
+    }
+
+    // Tạo Course và Link TeacherCourse
     const newCourse = await prisma.course.create({
         data: {
             title: courseData.title,
@@ -20,10 +22,13 @@ const createCourse = async (courseData) => {
             endDate: courseData.endDate ? new Date(courseData.endDate) : null,
             enrollmentKey: courseData.enrollmentKey || null,
             
-            // [QUAN TRỌNG] Tạo luôn bản ghi trong bảng TeacherCourse tại đây
+            // [QUAN TRỌNG] Gắn khóa học vào trường
+            schoolId: parseInt(schoolId),
+
+            // Tạo luôn bản ghi trong bảng TeacherCourse
             teacherCourses: {
                 create: {
-                    userId: teacherId
+                    userId: parseInt(teacherId)
                 }
             }
         }
@@ -32,38 +37,56 @@ const createCourse = async (courseData) => {
     return newCourse;
 }
 
-const getTeachingCourses = async (teacherId) => {
+// [MỚI] Nhận thêm schoolId để lọc
+const getTeachingCourses = async (teacherId, schoolId) => {
     const courses = await prisma.course.findMany({
         where: {
+            schoolId: parseInt(schoolId), // <--- Lọc theo trường
             teacherCourses: {
                 some: {
-                    userId: parseInt(teacherId) // Đảm bảo teacherId là số
+                    userId: parseInt(teacherId)
                 }
             }
         },
         include: {
-            category: true, // Lấy thêm thông tin danh mục để hiển thị đẹp hơn
+            category: true,
             _count: {
-                select: { enrollments: true } // Đếm số học viên
+                select: { enrollments: true }
             }
         }
     });
     return courses;
 };
 
-/**
- * Lấy chi tiết khóa học kèm nội dung (Sections > Modules)
- */
-const getCourseById = async (courseId) => {
+// [MỚI] Nhận thêm schoolId để bảo mật
+const getCourseById = async (courseId, schoolId) => {
+    const whereCondition = { id: parseInt(courseId) };
+    
+    // Nếu có schoolId truyền vào, thêm điều kiện lọc để tránh xem trộm trường khác
+    if (schoolId) {
+        whereCondition.schoolId = parseInt(schoolId);
+    }
+
     const course = await prisma.course.findUnique({
-        where: { id: parseInt(courseId) },
+        where: whereCondition, // findFirst sẽ an toàn hơn nếu dùng composite check, nhưng findUnique id là đủ nếu id là unique toàn cục.
+        // Tuy nhiên, để chặt chẽ ta dùng findFirst bên dưới nếu muốn
+        // Ở đây dùng findFirst cho chắc chắn:
+    });
+    
+    // Để dùng được findUnique với schoolId, bạn phải có composite index. 
+    // Tạm thời dùng findFirst để an toàn:
+    const safeCourse = await prisma.course.findFirst({
+        where: {
+            id: parseInt(courseId),
+            ...(schoolId && { schoolId: parseInt(schoolId) })
+        },
         include: {
             category: true,
             sections: {
-                orderBy: { orderIndex: 'asc' }, // Sắp xếp chương theo thứ tự
+                orderBy: { orderIndex: 'asc' },
                 include: {
                     modules: {
-                        orderBy: { orderIndex: 'asc' } // Sắp xếp bài học
+                        orderBy: { orderIndex: 'asc' }
                     }
                 }
             },
@@ -72,11 +95,14 @@ const getCourseById = async (courseId) => {
             }
         }
     });
-    return course;
+
+    return safeCourse;
 };
 
-const createSection = async (courseId, title) => {
-    // Tìm section cuối cùng để tính orderIndex
+const createSection = async (courseId, titleInput) => {
+    const title = (typeof titleInput === 'object' && titleInput.title) 
+        ? titleInput.title 
+        : titleInput;
     const lastSection = await prisma.courseSection.findFirst({
         where: { courseId: parseInt(courseId) },
         orderBy: { orderIndex: 'desc' }
@@ -86,7 +112,9 @@ const createSection = async (courseId, title) => {
     return await prisma.courseSection.create({
         data: {
             courseId: parseInt(courseId),
-            title: title.title,
+            title: title, // Lưu ý: controller gửi { title: "..." } nên ở đây là title.title hoặc title tùy cách gọi
+            // Ở controller bạn gọi: createSection(id, title) -> title là string
+            // Nên ở đây data: { title: title } là đúng
             orderIndex: newOrder
         }
     });
@@ -99,20 +127,13 @@ const createModule = async (sectionId, moduleData) => {
   });
 
   const newOrder = lastModule ? (lastModule.orderIndex || 0) + 1 : 0;
-
   let content;
 
-  if (moduleData.type === 'resource_url') {
+  // Tạo content tương ứng với type
+  if (moduleData.type === 'resource_url' || moduleData.type === 'resource_file') {
     content = await prisma.moduleResource.create({
       data: {
         description: moduleData.description,
-        filePathOrUrl: moduleData.filePathOrUrl || ''
-      }
-    });
-  } else if (moduleData.type === 'resource_file') {
-    content = await prisma.moduleResource.create({
-      data: {
-        description: moduleData.description, 
         filePathOrUrl: moduleData.filePathOrUrl || ''
       }
     });
@@ -124,13 +145,11 @@ const createModule = async (sectionId, moduleData) => {
       }
     });
   } else if (moduleData.type === 'quiz') {
-    // moduleData.questions là mảng câu hỏi từ Frontend gửi lên
     content = await prisma.moduleQuiz.create({
       data: {
         description: moduleData.description || '',
         timeLimitMinutes: parseInt(moduleData.timeLimitMinutes) || null,
         gradePassing: moduleData.gradePassing || null,
-        // Tạo luôn câu hỏi và đáp án lồng nhau
         questions: {
           create: moduleData.questions?.map((q, index) => ({
               questionText: q.questionText,
@@ -148,8 +167,7 @@ const createModule = async (sectionId, moduleData) => {
         }
       }
     });
-  }
-  else if (moduleData.type === 'flashcard') {
+  } else if (moduleData.type === 'flashcard') {
     content = await prisma.moduleFlashcard.create({
       data: {
         description: moduleData.description || '',
@@ -163,6 +181,7 @@ const createModule = async (sectionId, moduleData) => {
       }
     });
   }
+
   const courseModule = await prisma.courseModule.create({
     data: {
       sectionId: parseInt(sectionId),
@@ -176,42 +195,29 @@ const createModule = async (sectionId, moduleData) => {
   return courseModule;
 };
 
-
 const getModuleById = async (id, type) => {
     let moduleContent = null;
-    if (type === 'resource_url') {
-        moduleContent = await prisma.moduleResource.findUnique({
-            where: { id: parseInt(id) } 
-        });
-    } else if (type === 'resource_file') {
-        moduleContent = await prisma.moduleResource.findUnique({
-            where: { id: parseInt(id) } 
-        });
+    const commonQuery = { where: { id: parseInt(id) } };
+
+    if (type === 'resource_url' || type === 'resource_file') {
+        moduleContent = await prisma.moduleResource.findUnique(commonQuery);
     } else if (type === 'assignment') {
-        moduleContent = await prisma.moduleAssignment.findUnique({
-            where: { id: parseInt(id) } 
-        });
+        moduleContent = await prisma.moduleAssignment.findUnique(commonQuery);
     } else if (type === 'quiz') {
-        // include để lấy questions và options
         moduleContent = await prisma.moduleQuiz.findUnique({
             where: { id: parseInt(id) },
             include: {
                 questions: {
-                    orderBy: { orderIndex: 'asc' }, // Sắp xếp theo thứ tự
-                    include: {
-                        options: true // Lấy danh sách đáp án
-                    }
+                    orderBy: { orderIndex: 'asc' },
+                    include: { options: true }
                 }
             }
         });
-    }
-    else if (type === 'flashcard') {
+    } else if (type === 'flashcard') {
         moduleContent = await prisma.moduleFlashcard.findUnique({
             where: { id: parseInt(id) },
             include: {
-                flashcards: {
-                    orderBy: { orderIndex: 'asc' }
-                }
+                flashcards: { orderBy: { orderIndex: 'asc' } }
             }
         });
     }
@@ -219,155 +225,119 @@ const getModuleById = async (id, type) => {
 }
 
 const deleteSection = async (sectionId) => {
-    // Xoá section cùng với các module bên trong (theo cascade)
-    await prisma.courseSection.delete({
-        where: { id: parseInt(sectionId) }
-    });
+    await prisma.courseSection.delete({ where: { id: parseInt(sectionId) } });
 };
+
 const deleteModule = async (moduleId, type) => {
     try {
-        // 1. Tìm module để lấy contentId TRƯỚC KHI XÓA
         const moduleRecord = await prisma.courseModule.findUnique({
             where: { id: parseInt(moduleId) },
             select: { contentId: true },
         });
 
-        if (!moduleRecord) {
-            throw new Error("Bài học không tồn tại.");
-        }
+        if (!moduleRecord) throw new Error("Bài học không tồn tại.");
+        const { contentId } = moduleRecord;
 
-        const { contentId } = moduleRecord; // Lấy giá trị ID ra khỏi object
+        // Xoá CourseModule trước
+        await prisma.courseModule.delete({ where: { id: parseInt(moduleId) } });
 
-        // 2. Xoá CourseModule trước
-        await prisma.courseModule.delete({
-            where: { id: parseInt(moduleId) }
-        });
-
-        // 3. Xoá nội dung tương ứng (Resource/Assignment/Quiz)
-        // Kiểm tra nếu có contentId hợp lệ
+        // Xoá nội dung tương ứng
         if (contentId) {
             if (type === 'resource_url' || type === 'resource_file') {
-                await prisma.moduleResource.delete({
-                    where: { id: parseInt(contentId) }
-                });
+                await prisma.moduleResource.delete({ where: { id: parseInt(contentId) } });
             } else if (type === 'assignment') {
-                await prisma.moduleAssignment.delete({
-                    where: { id: parseInt(contentId) }
-                });
+                await prisma.moduleAssignment.delete({ where: { id: parseInt(contentId) } });
             } else if (type === 'quiz') {
-                await prisma.moduleQuiz.delete({
-                    where: { id: parseInt(contentId) }
-                });
-            }
-            else if (type === 'flashcard') {
-                await prisma.moduleFlashcard.delete({
-                    where: { id: parseInt(contentId) }
-                });
+                await prisma.moduleQuiz.delete({ where: { id: parseInt(contentId) } });
+            } else if (type === 'flashcard') {
+                await prisma.moduleFlashcard.delete({ where: { id: parseInt(contentId) } });
             }
         }
     } catch (error) {
-        // Log lỗi chi tiết để debug nếu cần
-        console.error("Delete Module Error Detail:", error);
+        console.error("Delete Module Error:", error);
         throw new Error('Lỗi khi xoá bài học: ' + error.message);
     }
 };
 
 const submitAssignment = async (userId, assignmentId, file) => {
-    // 1. Kiểm tra assignment có tồn tại không
     const assignment = await prisma.moduleAssignment.findUnique({
         where: { id: parseInt(assignmentId) }
     });
 
-    if (!assignment) {
-        throw new Error("Bài tập không tồn tại.");
-    }
+    if (!assignment) throw new Error("Bài tập không tồn tại.");
 
-    // 2. Tính toán nộp muộn (isLate)
     let isLate = false;
     if (assignment.dueDate && new Date() > new Date(assignment.dueDate)) {
         isLate = true;
     }
 
-    // 3. Tạo record Submission
-    // Lưu ý: userId lấy từ token, assignmentId lấy từ params
-    const submission = await prisma.assignmentSubmission.create({
+    return await prisma.assignmentSubmission.create({
         data: {
             assignmentId: parseInt(assignmentId),
             userId: parseInt(userId),
-            filePath: file.path, // Đường dẫn file đã lưu trên server
+            filePath: file.path,
             submittedAt: new Date(),
             isLate: isLate
         }
     });
-
-    return submission;
 };
 
-const getEnrolledCourses = async (studentId) => {
+// [MỚI] Nhận schoolId để lọc
+const getEnrolledCourses = async (studentId, schoolId) => {
     const id = parseInt(studentId);
-    if (isNaN(id)) {
-        throw new Error("Student ID không hợp lệ.");
-    }
+    if (isNaN(id)) throw new Error("Student ID không hợp lệ.");
+
     return await prisma.course.findMany({
         where: {
+            schoolId: parseInt(schoolId), // <--- Lọc theo trường
             enrollments: {
                 some: {
-                    userId: parseInt(studentId)
+                    userId: id
                 }
             }
         },
         include: {
             category: true,
-            // Lấy thông tin giảng viên để hiển thị
             teacherCourses: {
                 include: {
-                    user: {
-                        select: { username: true, email: true }
-                    }
+                    user: { select: { username: true, email: true } }
                 }
             },
-            // Đếm số bài học để tính tiến độ (cơ bản)
             _count: {
-                select: { 
-                    sections: true // Hoặc query sâu hơn để đếm modules
-                }
+                select: { sections: true }
             }
         }
     });
 };
 
-// Lấy danh sách học sinh trong khóa học
 const getStudentsInCourse = async (courseId) => {
     return await prisma.enrollment.findMany({
         where: {
             courseId: parseInt(courseId),
-            role: 'student' // Chỉ lấy role student
+            role: 'student'
         },
         include: {
             user: {
-                select: {
-                    id: true,
-                    username: true,
-                    email: true,
-                    isLocked: true
-                }
+                select: { id: true, username: true, email: true, isLocked: true }
             }
         }
     });
 };
 
-// Thêm học sinh vào khóa học bằng Email
-const addStudentToCourse = async (courseId, email) => {
-    // 1. Tìm user theo email
-    const student = await prisma.user.findUnique({
-        where: { email: email }
+// [MỚI] Thêm check schoolId khi add student
+const addStudentToCourse = async (courseId, email, schoolId) => {
+    // 1. Tìm user theo email VÀ trong cùng trường
+    const student = await prisma.user.findFirst({
+        where: { 
+            email: email,
+            ...(schoolId && { schoolId: parseInt(schoolId) }) // Đảm bảo chỉ add HS trường mình
+        }
     });
 
     if (!student) {
-        throw new Error("Không tìm thấy người dùng với email này.");
+        throw new Error("Không tìm thấy học viên với email này trong trường.");
     }
 
-    // 2. Kiểm tra xem đã tham gia chưa
     const existingEnrollment = await prisma.enrollment.findUnique({
         where: {
             userId_courseId: {
@@ -381,7 +351,6 @@ const addStudentToCourse = async (courseId, email) => {
         throw new Error("Học viên này đã tham gia khóa học.");
     }
 
-    // 3. Tạo enrollment
     return await prisma.enrollment.create({
         data: {
             userId: student.id,
@@ -391,7 +360,6 @@ const addStudentToCourse = async (courseId, email) => {
     });
 };
 
-// Xóa học sinh khỏi khóa học
 const removeStudentFromCourse = async (courseId, studentId) => {
     return await prisma.enrollment.deleteMany({
         where: {
@@ -401,9 +369,7 @@ const removeStudentFromCourse = async (courseId, studentId) => {
     });
 };
 
-// Lấy danh sách bài nộp và điểm của một Module (Assignment)
 const getSubmissionsByModule = async (moduleId) => {
-    // 1. Lấy thông tin Module
     const moduleInfo = await prisma.courseModule.findUnique({
         where: { id: parseInt(moduleId) },
         include: { section: true }
@@ -411,7 +377,6 @@ const getSubmissionsByModule = async (moduleId) => {
 
     if (!moduleInfo) throw new Error("Module không tồn tại.");
 
-    // 2. Lấy tất cả học viên trong khóa học (để hiện cả người chưa nộp)
     const enrollments = await prisma.enrollment.findMany({
         where: {
             courseId: moduleInfo.section.courseId,
@@ -422,33 +387,29 @@ const getSubmissionsByModule = async (moduleId) => {
         }
     });
 
-    // 3. Lấy bảng điểm (Grade) của module này
     const grades = await prisma.grade.findMany({
         where: { moduleId: parseInt(moduleId) }
     });
 
-    // 4. Lấy dữ liệu nộp bài (Nếu là Assignment)
     let submissions = [];
     if (moduleInfo.moduleType === 'assignment') {
         submissions = await prisma.assignmentSubmission.findMany({
             where: { assignmentId: moduleInfo.contentId }
         });
     } 
-    // Nếu là Quiz, ta có thể lấy QuizAttempt để biết thời gian làm, nhưng Grade là đủ để hiện điểm
 
-    // 5. Gộp dữ liệu (Map Students + Grade + Submission)
     const result = enrollments.map(enrollment => {
         const student = enrollment.user;
         const gradeRecord = grades.find(g => g.userId === student.id);
         const submissionRecord = submissions.find(s => s.userId === student.id);
 
         return {
-            student: student, // Thông tin HS
-            score: gradeRecord ? gradeRecord.score : null, // Điểm
-            feedback: gradeRecord ? gradeRecord.feedback : null, // Nhận xét
-            submittedAt: submissionRecord ? submissionRecord.submittedAt : null, // Thời gian nộp (Assignment)
-            gradedAt: gradeRecord ? gradeRecord.gradedAt : null, // Thời gian chấm
-            filePath: submissionRecord ? submissionRecord.filePath : null, // File (nếu có)
+            student: student,
+            score: gradeRecord ? gradeRecord.score : null,
+            feedback: gradeRecord ? gradeRecord.feedback : null,
+            submittedAt: submissionRecord ? submissionRecord.submittedAt : null,
+            gradedAt: gradeRecord ? gradeRecord.gradedAt : null,
+            filePath: submissionRecord ? submissionRecord.filePath : null,
             isLate: submissionRecord ? submissionRecord.isLate : false
         };
     });
@@ -456,10 +417,7 @@ const getSubmissionsByModule = async (moduleId) => {
     return result;   
 };
 
-
-// Chấm điểm (Tạo mới hoặc Cập nhật)
 const updateGrade = async (graderId, moduleId, studentId, score, feedback) => {
-    // Tìm module để lấy courseId (cần cho bảng Grade)
     const moduleInfo = await prisma.courseModule.findUnique({
         where: { id: parseInt(moduleId) },
         include: { section: true }
@@ -493,46 +451,33 @@ const updateGrade = async (graderId, moduleId, studentId, score, feedback) => {
 };
 
 const submitQuiz = async (userId, moduleId, answers) => {
-    // 1. Lấy thông tin Module để biết contentId (ID của Quiz) và CourseId
     const courseModule = await prisma.courseModule.findUnique({
         where: { id: parseInt(moduleId) },
-        include: { section: true } // Để lấy courseId
+        include: { section: true }
     });
 
     if (!courseModule || courseModule.moduleType !== 'quiz') {
         throw new Error("Module không tồn tại hoặc không phải là Quiz");
     }
 
-    // 2. Lấy chi tiết bài Quiz và đáp án đúng
     const quiz = await prisma.moduleQuiz.findUnique({
         where: { id: courseModule.contentId },
-        include: { 
-            questions: { 
-                include: { options: true } 
-            } 
-        }
+        include: { questions: { include: { options: true } } }
     });
 
     if (!quiz) throw new Error("Không tìm thấy dữ liệu câu hỏi");
 
-    // 3. Tính điểm (Logic phía Server để bảo mật)
     let totalScore = 0;
-    let maxScore = 0;
     const attemptAnswersData = [];
 
     quiz.questions.forEach(q => {
-        const userOptionId = answers[q.id]; // ID đáp án user chọn gửi lên
+        const userOptionId = answers[q.id];
         const correctOption = q.options.find(opt => opt.isCorrect);
-        
-        // Cộng điểm tối đa (nếu cần tính %)
-        maxScore += (q.points || 0);
 
-        // Kiểm tra đúng/sai
         if (userOptionId && correctOption && parseInt(userOptionId) === correctOption.id) {
             totalScore += (q.points || 0);
         }
 
-        // Tạo dữ liệu lưu chi tiết câu trả lời
         if (userOptionId) {
             attemptAnswersData.push({
                 questionId: q.id,
@@ -541,15 +486,13 @@ const submitQuiz = async (userId, moduleId, answers) => {
         }
     });
 
-    // 4. Sử dụng Transaction để đảm bảo toàn vẹn dữ liệu
     return await prisma.$transaction(async (tx) => {
-        // 4.1. Lưu lượt làm bài vào QuizAttempt
         const attempt = await tx.quizAttempt.create({
             data: {
                 quizId: quiz.id,
                 userId: userId,
                 score: totalScore,
-                startedAt: new Date(), // Giả sử bắt đầu lúc nộp (hoặc bạn có thể truyền từ client)
+                startedAt: new Date(),
                 completedAt: new Date(),
                 answers: {
                     create: attemptAnswersData
@@ -557,20 +500,6 @@ const submitQuiz = async (userId, moduleId, answers) => {
             }
         });
 
-        // 4.2. Lưu/Cập nhật điểm vào bảng Grade (Để Teacher xem được)
-        // Logic: Luôn lấy điểm cao nhất hoặc điểm mới nhất tùy bạn (Ở đây mình để cập nhật điểm mới nhất)
-        
-        // Kiểm tra xem đã có điểm chưa
-        const existingGrade = await tx.grade.findUnique({
-            where: {
-                userId_moduleId: {
-                    userId: userId,
-                    moduleId: parseInt(moduleId)
-                }
-            }
-        });
-
-        // Nếu chưa có hoặc muốn ghi đè điểm
         await tx.grade.upsert({
             where: {
                 userId_moduleId: {
@@ -581,12 +510,12 @@ const submitQuiz = async (userId, moduleId, answers) => {
             update: {
                 score: totalScore,
                 gradedAt: new Date(),
-                graderId: null // Hệ thống tự chấm
+                graderId: null
             },
             create: {
                 userId: userId,
                 moduleId: parseInt(moduleId),
-                courseId: courseModule.section.courseId, // Quan trọng: Để biết điểm này thuộc khóa nào
+                courseId: courseModule.section.courseId,
                 score: totalScore,
                 gradedAt: new Date(),
                 graderId: null
@@ -598,28 +527,17 @@ const submitQuiz = async (userId, moduleId, answers) => {
 };
 
 const getQuizLeaderboard = async (moduleId) => {
-    // Lấy danh sách điểm từ bảng Grade, sắp xếp điểm cao nhất lên đầu
-    const leaderboard = await prisma.grade.findMany({
-        where: {
-            moduleId: parseInt(moduleId)
-        },
+    return await prisma.grade.findMany({
+        where: { moduleId: parseInt(moduleId) },
         include: {
-            user: {
-                select: {
-                    id: true,
-                    username: true,
-                    // avatar: true // Nếu có trường avatar thì bỏ comment
-                }
-            }
+            user: { select: { id: true, username: true } }
         },
         orderBy: [
-            { score: 'desc' },      // Điểm cao xếp trước
-            { gradedAt: 'asc' }     // Nếu bằng điểm, ai nộp trước xếp trước
+            { score: 'desc' },
+            { gradedAt: 'asc' }
         ],
-        take: 20 // Chỉ lấy top 20
+        take: 20
     });
-
-    return leaderboard;
 };
 
 module.exports = {

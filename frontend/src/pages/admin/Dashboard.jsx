@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axiosClient';
+import adminApi from '../../api/adminApi';
 
 const Dashboard = () => {
     // State lưu thống kê (Mock data ban đầu để tránh lỗi nếu chưa có API)
@@ -15,21 +16,12 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                // Nếu bạn chưa có API stats thì dùng mock này, nếu có thì bỏ comment dưới
-                // const res = await api.get('/admin/stats'); 
-                // setStats(res.data);
-                
-                // Mock data tạm thời
-                setTimeout(() => {
-                    setStats({
-                        totalUsers: 150,
-                        totalCourses: 12,
-                        activeStudents: 45
-                    });
-                    setLoading(false);
-                }, 500);
+                const data = await adminApi.getStats();
+                console.log("Thống kê Dashboard:", data);
+                setStats(data.data);
             } catch (error) {
-                console.error("Lỗi tải thống kê:", error);
+                console.error("Không thể tải thống kê:", error);
+            } finally {
                 setLoading(false);
             }
         };
@@ -67,7 +59,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                {/* Card Active Students */}
+                {/* Card Active Students
                 <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
                     <div className="flex justify-between items-center">
                         <div>
@@ -76,7 +68,7 @@ const Dashboard = () => {
                         </div>
                         <span className="text-3xl">🟢</span>
                     </div>
-                </div>
+                </div> */}
             </div>
 
             {/* --- 2. HÀNH ĐỘNG NHANH (QUICK ACTIONS) --- */}
@@ -103,7 +95,7 @@ const Dashboard = () => {
                     </div>
                 </Link>
                 
-                {/* Placeholder cho các tính năng khác */}
+                {/* Placeholder cho các tính năng khác
                 <div className="bg-white p-4 rounded shadow hover:shadow-md transition flex items-center space-x-3 opacity-60 cursor-not-allowed">
                     <div className="bg-gray-100 p-3 rounded-full text-gray-600">
                         ⚙️
@@ -112,7 +104,7 @@ const Dashboard = () => {
                         <p className="font-semibold">Bảo trì hệ thống</p>
                         <p className="text-xs text-gray-500">Tính năng đang phát triển</p>
                     </div>
-                </div>
+                </div> */}
             </div>
         </div>
     );

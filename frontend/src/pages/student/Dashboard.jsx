@@ -1,10 +1,11 @@
 // frontend/src/pages/student/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import coursesApi from '../../api/coursesApi';
 
 const StudentDashboard = () => {
     const [courses, setCourses] = useState([]);
+    const { schoolSlug } = useParams();
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -69,7 +70,7 @@ const StudentDashboard = () => {
                                     </div>
                                     
                                     <Link 
-                                        to={`/course/${course.id}`} 
+                                        to={`/${schoolSlug}/course/${course.id}`}
                                         className="block w-full text-center bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded transition"
                                     >
                                         Vào học ngay

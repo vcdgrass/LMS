@@ -6,8 +6,24 @@ datasource db {
   provider = "postgresql"
 }
 
+model School {
+  id          Int      @id @default(autoincrement()) @map("id_school")
+  name        String   @db.VarChar(255) // Tên trường (VD: THPT Chuyên Hà Tĩnh)
+  slug        String   @unique @db.VarChar(50) // Định danh trên URL (VD: ChuyenHT)
+  logoUrl     String?  @map("logo_url")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  
+  // Quan hệ ngược (để truy vấn dễ dàng)
+  users            User[]
+  courses          Course[]
+  courseCategories CourseCategory[]
+
+  @@map("School")
+}
+
 model User {
   id            Int                    @id @default(autoincrement()) @map("id_user")
+  schoolId      Int?                   @map("school_id")
   username      String                 @unique @db.VarChar(255)
   email         String                 @unique @db.VarChar(255)
   passwordHash  String                 @map("password_hash")
@@ -21,23 +37,31 @@ model User {
   notifications Notification[]
   attempts      QuizAttempt[]
   teacherCourses TeacherCourse[]
+  school        School?                @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
+  // Username và Email chỉ cần là duy nhất trong phạm vi 1 trường
+  @@unique([username, schoolId])
+  @@unique([email, schoolId])
   @@map("User")
 }
 
 model CourseCategory {
   id       Int              @id @default(autoincrement()) @map("id_category")
+  schoolId Int              @map("school_id")
   name     String           @db.VarChar(255)
   parentId Int?             @map("parent_id")
   courses  Course[]
   parent   CourseCategory?  @relation("CategoryParentChild", fields: [parentId], references: [id])
   children CourseCategory[] @relation("CategoryParentChild")
+  school   School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
   @@map("CourseCategory")
 }
  
 model Course {
   id            Int             @id @default(autoincrement()) @map("id_course")
+  schoolId      Int             @map("school_id")
+  school        School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   categoryId    Int             @map("category_id")
   title         String          @db.VarChar(255)
   description   String?
